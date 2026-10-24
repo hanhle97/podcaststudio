@@ -1,0 +1,70 @@
+# Brand + production settings. Every episode uses these unless the script's
+# frontmatter overrides them (background, music).
+
+channel:
+  name: "Podcast Studio"          # channel name shown top-left in the video
+  logo: logo.png                  # path relative to assets/; missing file = text-only header
+
+colors:
+  primary: "#F5B700"              # highlight colour: active subtitle word, progress bar, waveform
+  background: "#0F172A"           # base background colour
+  text: "#F8FAFC"                 # main text colour
+  muted: "#94A3B8"                # secondary text (channel name, inactive words)
+  gradient: ["#0F172A", "#1E3A8A", "#4C1D95"]   # colours for the "gradient" background
+
+fonts:
+  family: "Be Vietnam Pro"        # must support Vietnamese diacritics
+  regular: fonts/BeVietnamPro-Regular.ttf   # relative to assets/
+  bold: fonts/BeVietnamPro-Bold.ttf
+
+video:
+  background: gradient            # default background: kenburns | loop | gradient
+  fps: 30
+
+script:
+  long_sentence_warn_chars: 300   # parser warns when a sentence is longer than this
+  max_pause_seconds: 30           # [pause Ns] above this is clamped (with a warning)
+  music_up_seconds: 3             # default length of a [music up] break
+
+tts:
+  provider: voice_studio          # voice_studio | elevenlabs (stub)
+  concurrency: 2                  # parallel requests to the TTS API
+  max_chars_per_request: 400      # long sentences are split at commas/spaces below this
+
+audio:
+  sample_rate: 48000              # all speech is normalised to this rate, mono
+  gaps_ms:                        # silence inserted between pieces of speech
+    sentence: 250
+    paragraph: 600
+    chapter: 1200
+  highpass_hz: 60                 # remove rumble below this frequency
+  compressor:
+    enabled: true                 # very gentle compression; set false to skip
+    threshold_db: -18
+    ratio: 2
+    attack_ms: 20
+    release_ms: 250
+  loudness:                       # two-pass loudnorm target (podcast standard)
+    target_lufs: -16
+    true_peak_db: -1.5
+    lra: 11
+  music:
+    level_db: -22                 # music level relative to the voice (-20..-25 recommended)
+    duck_db: 10                   # extra reduction while the voice is speaking
+    fade_in_s: 3
+    fade_out_s: 5
+    intro: null                   # optional file in assets/music/ played before the voice
+    outro: null                   # optional file in assets/music/ played after the voice
+  mp3_bitrate: 192k
+
+subtitles:
+  max_chars_per_line: 42
+  max_lines: 2
+  karaoke_min_words: 2            # word groups for Shorts karaoke captions
+  karaoke_max_words: 4
+
+shorts:
+  min_clips: 3
+  max_clips: 5
+  min_seconds: 30
+  max_seconds: 60

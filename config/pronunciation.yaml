@@ -1,0 +1,10 @@
+# Pronunciation dictionary applied to text BEFORE it is sent to TTS.
+# Subtitles always show the original word from the script.
+# Matching is case-sensitive and on whole words.
+n8n: "en ây en"
+API: "ây pi ai"
+AI: "ây ai"
+LLM: "eo eo em"
+YouTube: "diu túp"
+Docker: "đốc cơ"
+FastAPI: "phát ây pi ai"

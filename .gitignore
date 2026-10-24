@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node / Remotion
+node_modules/
+remotion/out/
+remotion/public/episode/
+
+# Runtime data (episode outputs, job state, TTS cache)
+data/episodes/*
+!data/episodes/.gitkeep
+data/jobs/
+data/cache/
+data/inbox/*.md
+data/inbox/done/*
+!data/inbox/done/.gitkeep
+
+# Model caches
+models/
+.pytest_tmp/

@@ -1,0 +1,78 @@
+# Profiles: COMPOSE_PROFILES=cpu (default, set in .env) or COMPOSE_PROFILES=gpu.
+# Both media-service variants answer on the network name "media-service".
+
+x-media-service: &media-service
+  build:
+    context: .
+    dockerfile: media_service/Dockerfile
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATA_DIR: /data
+    CONFIG_DIR: /config
+    ASSETS_DIR: /assets
+  volumes:
+    - ./data:/data
+    - ./config:/config:ro
+    - ./assets:/assets:ro
+    - whisper_models:/root/.cache/huggingface
+  ports:
+    - "${MEDIA_PORT:-8000}:8000"
+  extra_hosts:
+    # lets the container reach a Voice Studio running on this machine
+    - "host.docker.internal:host-gateway"
+  restart: unless-stopped
+  networks:
+    default:
+      aliases: [media-service]
+
+services:
+  media-service-cpu:
+    <<: *media-service
+    profiles: [cpu]
+    image: podcast-studio/media-service:cpu
+
+  media-service-gpu:
+    <<: *media-service
+    profiles: [gpu]
+    image: podcast-studio/media-service:gpu
+    build:
+      context: .
+      dockerfile: media_service/Dockerfile
+      args:
+        WITH_CUDA: "1"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      GENERIC_TIMEZONE: ${TZ:-Asia/Ho_Chi_Minh}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_SECURE_COOKIE: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      # n8n 2.x disables the Local File Trigger by default; we need it for data/inbox
+      NODES_EXCLUDE: "[]"
+      N8N_RESTRICT_FILE_ACCESS_TO: /data
+      MEDIA_SERVICE_URL: http://media-service:8000
+      MEDIA_PUBLIC_URL: ${MEDIA_PUBLIC_URL:-http://localhost:8000}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./data:/data
+      - ./n8n/workflows:/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  n8n_data:
+  whisper_models:
