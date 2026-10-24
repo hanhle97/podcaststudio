@@ -126,12 +126,16 @@ class LoudnessCfg(BaseModel):
 
 
 class MusicCfg(BaseModel):
+    enabled: bool = True
     level_db: float = -22
     duck_db: float = 10
+    duck_attack_ms: float = 20
+    duck_release_ms: float = 1200
     fade_in_s: float = 3
     fade_out_s: float = 5
     intro: str | None = None
     outro: str | None = None
+    crossfade_s: float = 1.0
 
 
 class AudioCfg(BaseModel):

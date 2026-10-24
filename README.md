@@ -42,6 +42,27 @@ chỉ tạo lại câu đó. `config/pronunciation.yaml` đổi cách đọc (v�
 nhưng phụ đề vẫn hiện chữ gốc. Người nói khác (`[Lan]: ...`) gán giọng trong
 `brand.yaml` → `tts.voices`.
 
+## Nhạc nền
+
+Bỏ file nhạc **có license** vào `assets/music/` (mp3/wav/m4a/ogg/flac). Mỗi tập dùng bài ghi trong
+frontmatter (`music: ten_bai.mp3`), nếu không ghi thì chọn ngẫu nhiên, nhưng cố định theo tập
+nên chạy lại vẫn ra cùng bài. Bài ngắn hơn giọng sẽ được loop.
+
+> `assets/music/placeholder_ambient.mp3` chỉ là tone sine tạo bằng ffmpeg để test.
+> Hãy xóa nó và thay bằng nhạc của bạn.
+
+Mức nhạc chỉnh trong `brand.yaml` → `audio.music`:
+- `level_db`: nhạc nằm dưới giọng bao nhiêu dB khi đang nói (mặc định -22).
+- `duck_db`: nhạc lên bao nhiêu ở `[music up]` và giữa chapter (mặc định 10).
+- `duck_release_ms`: nhạc lên chậm hay nhanh khi giọng dừng. Khoảng nghỉ ngắn giữa câu hầu như không làm nhạc đổi mức.
+- `intro` / `outro`: file trong `assets/music/`, nối bằng crossfade.
+
+Kiểm tra ducking của một tập:
+
+```bash
+docker compose exec media-service-cpu python scripts/check_ducking.py /data/episodes/<id>
+```
+
 ## Cấu trúc
 
 | Thư mục | Nội dung |

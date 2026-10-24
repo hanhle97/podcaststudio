@@ -157,15 +157,19 @@ def _mix_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
     return run_mix(env, progress)
 
 
+def _mix_inputs(env: StepEnv) -> list[Path | str]:
+    from app.audio.mix import music_inputs
+
+    return [env.paths.script_json, env.paths.root / "tts" / "manifest.json",
+            env.brand.audio.model_dump_json(), *music_inputs(env)]
+
+
 MIX = Step(
     name="mix",
     label="Ghép thoại và xử lý audio",
     outputs=lambda env: [env.paths.root / n for n in
                          ("segments.json", "final_audio.wav", "final_audio.mp3")],
-    inputs=lambda env: [
-        env.paths.script_json, env.paths.root / "tts" / "manifest.json",
-        env.brand.audio.model_dump_json(),
-    ],
+    inputs=lambda env: _mix_inputs(env),
     run=_mix_run,
 )
 

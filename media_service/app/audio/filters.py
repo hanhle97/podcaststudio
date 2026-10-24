@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 import re
 
-from app.config import AudioCfg, LoudnessCfg
+from app.config import AudioCfg, LoudnessCfg, MusicCfg
+
+# The ducking key is the voice pushed into a limiter, so it sits at a steady level
+# (about KEY_OVER_DB above the sidechain threshold) whenever anyone speaks and is
+# digital silence otherwise. That makes the gain reduction ~constant: duck_db.
+KEY_BOOST_DB = 30
+KEY_LIMIT = 0.5
+DUCK_THRESHOLD = 0.01  # -40 dBFS
+KEY_OVER_DB = 40  # measured with scripts/check_ducking.py
 
 
 def db_to_linear(db: float) -> float:
@@ -22,8 +30,8 @@ def trim_filter(threshold_db: float, keep_start_s: float = 0.05,
     return f"{head},areverse,{tail},areverse"
 
 
-def normalize_format(sample_rate: int) -> str:
-    return f"aresample={sample_rate},aformat=sample_fmts=s16:channel_layouts=mono"
+def normalize_format(sample_rate: int, layout: str = "mono") -> str:
+    return f"aresample={sample_rate},aformat=sample_fmts=s16:channel_layouts={layout}"
 
 
 def voice_chain(cfg: AudioCfg) -> list[str]:
@@ -80,3 +88,62 @@ def parse_loudnorm_json(stderr: str) -> dict[str, str]:
         if data[k] in ("-inf", "inf", "nan"):
             raise ValueError("Audio im lặng hoàn toàn, không đo được độ to.")
     return {k: str(v) for k, v in data.items()}
+
+
+# --- music bed + ducking -------------------------------------------------------------
+
+
+def music_gain_db(music_lufs: float, voice_lufs: float, cfg: MusicCfg) -> float:
+    """Gain that puts the un-ducked music at voice + level_db + duck_db.
+
+    While the voice speaks the sidechain removes duck_db, leaving the music at
+    voice + level_db (e.g. 22 dB under the voice).
+    """
+    return round(voice_lufs + cfg.level_db + cfg.duck_db - music_lufs, 2)
+
+
+def duck_ratio(duck_db: float, key_over_db: float = KEY_OVER_DB) -> float:
+    """Compressor ratio giving `duck_db` of reduction for a key `key_over_db` above threshold."""
+    if duck_db <= 0:
+        return 1.0
+    if duck_db >= key_over_db:
+        return 20.0
+    return round(min(20.0, key_over_db / (key_over_db - duck_db)), 3)
+
+
+def build_mix_graph(duration: float, gain_db: float, cfg: MusicCfg, sample_rate: int,
+                    output: str = "mix") -> str:
+    """filter_complex for input 0 = processed voice, input 1 = looped music.
+
+    output="mix"   -> [out] = voice + ducked music
+    output="music" -> [out] = ducked music only (diagnostics)
+    """
+    fmt = f"aresample={sample_rate},aformat=sample_fmts=fltp:channel_layouts=stereo"
+    fade_out_start = max(0.0, duration - cfg.fade_out_s)
+    bed = (f"[1:a]{fmt},volume={gain_db:g}dB,atrim=0:{duration:.3f},asetpts=N/SR/TB,"
+           f"afade=t=in:d={cfg.fade_in_s:g},"
+           f"afade=t=out:st={fade_out_start:.3f}:d={cfg.fade_out_s:g}[bed]")
+    voice = f"[0:a]{fmt},asplit=2[voice][key0]"
+    key = f"[key0]volume={KEY_BOOST_DB}dB,alimiter=limit={KEY_LIMIT}:attack=5:release=50[key]"
+    duck = (f"[bed][key]sidechaincompress=threshold={DUCK_THRESHOLD}:"
+            f"ratio={duck_ratio(cfg.duck_db)}:attack={cfg.duck_attack_ms:g}:"
+            f"release={cfg.duck_release_ms:g}:makeup=1[ducked]")
+    if output == "music":
+        tail = "[voice]anullsink;[ducked]anull[out]"
+    else:
+        tail = "[voice][ducked]amix=inputs=2:duration=first:normalize=0[out]"
+    return ";".join([bed, voice, key, duck, tail])
+
+
+def build_crossfade_graph(n_inputs: int, crossfade_s: float, sample_rate: int) -> str:
+    """Chain n stereo inputs with acrossfade (used for intro / body / outro)."""
+    fmt = f"aresample={sample_rate},aformat=sample_fmts=fltp:channel_layouts=stereo"
+    parts = [f"[{i}:a]{fmt}[a{i}]" for i in range(n_inputs)]
+    prev = "a0"
+    for i in range(1, n_inputs):
+        label = "out" if i == n_inputs - 1 else f"x{i}"
+        parts.append(f"[{prev}][a{i}]acrossfade=d={crossfade_s:g}:c1=tri:c2=tri[{label}]")
+        prev = label
+    if n_inputs == 1:
+        parts[0] = parts[0].replace("[a0]", "[out]")
+    return ";".join(parts)

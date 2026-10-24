@@ -55,6 +55,22 @@ class Timeline:
     def to_json(self) -> dict:
         return asdict(self)
 
+    def shifted(self, offset: float, total: float) -> Timeline:
+        """Same timeline moved by `offset` (e.g. an intro), ending at `total` seconds."""
+        def mv(x: float) -> float:
+            return round(x + offset, 3)
+
+        out = Timeline(sample_rate=self.sample_rate, duration=round(total, 3))
+        out.segments = [Segment(**{**asdict(s), "start": mv(s.start), "end": mv(s.end)})
+                        for s in self.segments]
+        out.breaks = [Break(b.kind, mv(b.start), mv(b.end)) for b in self.breaks]
+        out.chapters = [ChapterSpan(c.index, c.title, mv(c.start), mv(c.end))
+                        for c in self.chapters]
+        if out.chapters:
+            out.chapters[0].start = 0.0 if offset > 0 else out.chapters[0].start
+            out.chapters[-1].end = out.duration
+        return out
+
 
 def compute_timeline(script: Script, durations: dict[str, float], cfg: AudioCfg,
                      speech_texts: dict[str, str] | None = None) -> Timeline:
