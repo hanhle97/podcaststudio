@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -14,6 +15,7 @@ from app.episodes import EpisodeNotFound, EpisodeStore
 from app.jobs import EpisodeBusyError, Job, JobManager
 from app.pipeline import PIPELINE, STEPS, StepEnv, run_steps
 from app.script import ScriptParseError
+from app.tts import TTSError, get_provider
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level,
@@ -66,6 +68,17 @@ async def _script_error(_: Request, exc: ScriptParseError):
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True}
+
+
+@app.get("/tts/health")
+async def tts_health(request: Request) -> JSONResponse:
+    """Checked by n8n before starting a pipeline."""
+    try:
+        provider = get_provider(settings, request.app.state.brand)
+        info = await asyncio.to_thread(provider.health)
+    except TTSError as e:
+        info = {"ok": False, "message": str(e)}
+    return JSONResponse(status_code=200 if info.get("ok") else 503, content=info)
 
 
 # --- episodes ----------------------------------------------------------------------
@@ -146,6 +159,16 @@ def _submit(request: Request, episode_id: str, step_names: list[str] | None,
     job = jobs(request).submit(kind, lambda ctx: run_steps(env, ctx, steps, force),
                                episode_id=episode_id)
     return {"job_id": job.id, "status_url": f"/jobs/{job.id}"}
+
+
+@app.post("/episodes/{episode_id}/tts", status_code=202)
+async def step_tts(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["tts"], True, "tts")
+
+
+@app.post("/episodes/{episode_id}/mix", status_code=202)
+async def step_mix(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["mix"], True, "mix")
 
 
 @app.post("/episodes/{episode_id}/pipeline/run", status_code=202)

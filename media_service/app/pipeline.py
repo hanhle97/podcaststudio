@@ -132,6 +132,43 @@ PARSE = Step(
     run=_parse_run,
 )
 
-# Order of the full pipeline; later phases append tts, mix, align, ...
-PIPELINE: list[Step] = [PARSE]
+def _tts_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.tts.synthesize import run_tts
+
+    return run_tts(env, progress)
+
+
+TTS = Step(
+    name="tts",
+    label="Tạo giọng đọc (Voice Studio)",
+    outputs=lambda env: [env.paths.root / "tts" / "manifest.json"],
+    inputs=lambda env: [
+        env.paths.script_json, env.settings.config_dir / "pronunciation.yaml",
+        env.brand.tts.model_dump_json(), env.settings.voice_studio_voice_id,
+        str(env.brand.audio.sample_rate), str(env.brand.audio.trim_silence_db),
+    ],
+    run=_tts_run,
+)
+
+
+def _mix_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.audio.mix import run_mix
+
+    return run_mix(env, progress)
+
+
+MIX = Step(
+    name="mix",
+    label="Ghép thoại và xử lý audio",
+    outputs=lambda env: [env.paths.root / n for n in
+                         ("segments.json", "final_audio.wav", "final_audio.mp3")],
+    inputs=lambda env: [
+        env.paths.script_json, env.paths.root / "tts" / "manifest.json",
+        env.brand.audio.model_dump_json(),
+    ],
+    run=_mix_run,
+)
+
+# Order of the full pipeline; later phases append align, subtitles, ...
+PIPELINE: list[Step] = [PARSE, TTS, MIX]
 STEPS: dict[str, Step] = {s.name: s for s in PIPELINE}

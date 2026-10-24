@@ -28,8 +28,15 @@ script:
 
 tts:
   provider: voice_studio          # voice_studio | elevenlabs (stub)
+  model: omnivoice                # Voice Studio engine id
+  language: vi
+  speed: 1.0                      # 0.25..4.0
+  seed: 42                        # fixed seed = same sentence always sounds the same (cache-friendly)
   concurrency: 2                  # parallel requests to the TTS API
   max_chars_per_request: 400      # long sentences are split at commas/spaces below this
+  timeout_s: 300                  # per request (first request may load the model)
+  max_retries: 5                  # on network errors / 5xx / timeouts, exponential backoff
+  voices: {}                      # other speakers: {"Lan": "<voice_id>"}; default = VOICE_STUDIO_VOICE_ID
 
 audio:
   sample_rate: 48000              # all speech is normalised to this rate, mono
@@ -37,6 +44,9 @@ audio:
     sentence: 250
     paragraph: 600
     chapter: 1200
+  lead_in_ms: 500                 # silence before the first word
+  tail_ms: 1000                   # silence after the last word
+  trim_silence_db: -50            # trim TTS clip edges quieter than this
   highpass_hz: 60                 # remove rumble below this frequency
   compressor:
     enabled: true                 # very gentle compression; set false to skip

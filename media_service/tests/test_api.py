@@ -36,12 +36,13 @@ def test_create_episode_and_run_pipeline(client):
     again = client.post("/episodes", data={"script": SCRIPT}).json()
     assert again["episode"]["id"] == ep
 
+    # No Voice Studio in unit tests: parse succeeds, the run stops at tts with a clear reason.
     job = wait_job(client, client.post(f"/episodes/{ep}/pipeline/run").json()["job_id"])
-    assert job["status"] == "succeeded", job
-    assert job["result"]["steps"] == [{"step": "parse", "status": "ran",
-                                       "sentences": 2, "chapters": 2}]
+    assert job["status"] == "failed", job
+    assert job["error"]["step"] == "tts" and "VOICE_STUDIO_URL" in job["error"]["message"]
+    assert any("[parse] Đọc kịch bản: xong" in line for line in job["log"])
     job = wait_job(client, client.post(f"/episodes/{ep}/pipeline/run").json()["job_id"])
-    assert job["result"]["steps"][0]["status"] == "skipped"
+    assert any("[parse] Đọc kịch bản: đã có kết quả hợp lệ" in line for line in job["log"])
 
     files = [f["path"] for f in client.get(f"/episodes/{ep}/files").json()["files"]]
     assert {"script.md", "script.json", "episode.json"} <= set(files)
@@ -60,6 +61,11 @@ def test_invalid_script_returns_line_numbers(client):
 def test_missing_music_file(client):
     r = client.post("/episodes", data={"script": "---\nmusic: khong_co.mp3\n---\nA."})
     assert r.status_code == 422 and r.json()["errors"][0]["line"] == 2
+
+
+def test_tts_health_unconfigured(client):
+    r = client.get("/tts/health")
+    assert r.status_code == 503 and "VOICE_STUDIO_URL" in r.json()["message"]
 
 
 def test_unknown_episode_and_job(client):

@@ -94,8 +94,15 @@ class ScriptCfg(BaseModel):
 
 class TTSCfg(BaseModel):
     provider: Literal["voice_studio", "elevenlabs"] = "voice_studio"
+    model: str = "omnivoice"
+    language: str = "vi"
+    speed: float = 1.0
+    seed: int | None = 42
     concurrency: int = 2
     max_chars_per_request: int = 400
+    timeout_s: float = 300
+    max_retries: int = 5
+    voices: dict[str, str] = Field(default_factory=dict)  # speaker name -> voice id
 
 
 class GapsCfg(BaseModel):
@@ -130,6 +137,9 @@ class MusicCfg(BaseModel):
 class AudioCfg(BaseModel):
     sample_rate: int = 48000
     gaps_ms: GapsCfg = Field(default_factory=GapsCfg)
+    lead_in_ms: int = 500
+    tail_ms: int = 1000
+    trim_silence_db: float = -50
     highpass_hz: float = 60
     compressor: CompressorCfg = Field(default_factory=CompressorCfg)
     loudness: LoudnessCfg = Field(default_factory=LoudnessCfg)
