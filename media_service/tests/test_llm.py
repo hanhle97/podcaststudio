@@ -163,7 +163,9 @@ def test_claude_code_client_parses_structured_output(monkeypatch):
 
 
 def test_claude_code_client_errors(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     monkeypatch.setattr(client_mod.shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(client_mod.subprocess, "run", lambda *a, **k: pytest.fail("ran CLI"))
     with pytest.raises(LLMError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         ClaudeCodeClient(token="").complete_json("s", "p", {})
     err = {"is_error": True, "subtype": "success", "terminal_reason": "api_error",
