@@ -9,7 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
     CONFIG_DIR=/config \
     ASSETS_DIR=/assets \
-    REMOTION_DIR=/remotion
+    REMOTION_DIR=/remotion \
+    HF_HOME=/root/.cache/huggingface \
+    LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates fonts-dejavu-core \

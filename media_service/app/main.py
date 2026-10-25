@@ -171,6 +171,16 @@ async def step_mix(request: Request, episode_id: str) -> dict:
     return _submit(request, episode_id, ["mix"], True, "mix")
 
 
+@app.post("/episodes/{episode_id}/align", status_code=202)
+async def step_align(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["align"], True, "align")
+
+
+@app.post("/episodes/{episode_id}/subtitles", status_code=202)
+async def step_subtitles(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["subtitles"], True, "subtitles")
+
+
 @app.post("/episodes/{episode_id}/pipeline/run", status_code=202)
 async def pipeline_run(request: Request, episode_id: str, force: bool = False) -> dict:
     return _submit(request, episode_id, None, force, "pipeline")

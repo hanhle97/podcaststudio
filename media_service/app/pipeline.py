@@ -173,6 +173,42 @@ MIX = Step(
     run=_mix_run,
 )
 
-# Order of the full pipeline; later phases append align, subtitles, ...
-PIPELINE: list[Step] = [PARSE, TTS, MIX]
+def _align_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.align.step import run_align
+
+    return run_align(env, progress)
+
+
+ALIGN = Step(
+    name="align",
+    label="Lấy timing từng từ (faster-whisper)",
+    outputs=lambda env: [env.paths.root / "words.json"],
+    inputs=lambda env: [
+        env.paths.root / "segments.json", env.paths.root / "tts" / "manifest.json",
+        env.settings.config_dir / "pronunciation.yaml", env.settings.whisper_model,
+    ],
+    run=_align_run,
+)
+
+
+def _subtitles_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.subtitles.step import run_subtitles
+
+    return run_subtitles(env, progress)
+
+
+SUBTITLES = Step(
+    name="subtitles",
+    label="Tạo phụ đề",
+    outputs=lambda env: [env.paths.root / n for n in
+                         ("subtitles.srt", "subtitles.ass", "karaoke.json")],
+    inputs=lambda env: [
+        env.paths.root / "words.json", env.brand.subtitles.model_dump_json(),
+        env.brand.colors.model_dump_json(), env.brand.fonts.family,
+    ],
+    run=_subtitles_run,
+)
+
+# Order of the full pipeline; later phases append metadata, render, ...
+PIPELINE: list[Step] = [PARSE, TTS, MIX, ALIGN, SUBTITLES]
 STEPS: dict[str, Step] = {s.name: s for s in PIPELINE}

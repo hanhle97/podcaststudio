@@ -34,7 +34,7 @@ Kiểm tra kết nối:
 
 ```bash
 curl http://localhost:8000/tts/health
-docker compose exec media-service-cpu python scripts/probe_voice_studio.py
+docker compose exec media-service-cpu python scripts/probe_voice_studio.py   # hoặc media-service-gpu
 ```
 
 Giọng được cache theo hash (text + voice + tham số) trong `data/cache/tts/`, nên sửa một câu
@@ -57,10 +57,25 @@ Mức nhạc chỉnh trong `brand.yaml` → `audio.music`:
 - `duck_release_ms`: nhạc lên chậm hay nhanh khi giọng dừng. Khoảng nghỉ ngắn giữa câu hầu như không làm nhạc đổi mức.
 - `intro` / `outro`: file trong `assets/music/`, nối bằng crossfade.
 
+## Timing từng từ và phụ đề
+
+Phụ đề **luôn là chữ trong kịch bản**, không dùng LLM sửa. faster-whisper chỉ được dùng để lấy
+timing: chạy trên clip riêng của từng câu, rồi căn chỉnh với từ trong kịch bản. Từ nào whisper nghe
+lệch thì lấy khoảng thời gian whisper nghe được; từ nào không nghe thấy thì nội suy theo số ký tự.
+Mức khớp ghi trong `align_report.json`.
+
+- `WHISPER_MODEL=large-v3-turbo` (mặc định). Model tải về volume `whisper_models` ở lần chạy đầu.
+- `WHISPER_DEVICE=auto` dùng CUDA nếu có, không thì CPU. Với GPU, đặt `COMPOSE_PROFILES=gpu`
+  (cần Docker Desktop + WSL2 + driver NVIDIA). Trên RTX 5060 Ti, align tập 1 phút mất ~14 giây.
+
+Đầu ra: `words.json` (`[{word, start, end, sentence_id, chapter}]`), `subtitles.srt` (≤ 42 ký
+tự/dòng, ≤ 2 dòng, ngắt theo câu và dấu phẩy, không vắt chapter), `subtitles.ass` + `karaoke.json`
+(cụm 2–4 từ, tô sáng từng từ, cho Shorts).
+
 Kiểm tra ducking của một tập:
 
 ```bash
-docker compose exec media-service-cpu python scripts/check_ducking.py /data/episodes/<id>
+docker compose exec media-service-cpu python scripts/check_ducking.py /data/episodes/<id>   # hoặc media-service-gpu
 ```
 
 ## Cấu trúc

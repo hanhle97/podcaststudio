@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5-5"
 
     whisper_device: Literal["auto", "cuda", "cpu"] = "auto"
-    whisper_model: str = "large-v3"
+    whisper_model: str = "large-v3-turbo"
 
     max_concurrent_jobs: int = 1
     log_level: str = "INFO"
