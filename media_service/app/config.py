@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     whisper_model: str = "large-v3-turbo"
 
     max_concurrent_jobs: int = 1
+    # base URL used in links sent to Telegram (must be reachable from your phone)
+    media_public_url: str = "http://localhost:8000"
     log_level: str = "INFO"
 
     @property

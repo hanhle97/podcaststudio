@@ -1,0 +1,1448 @@
+{
+  "id": "PodcastPipeline1",
+  "name": "Podcast pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/inbox",
+        "events": [
+          "add",
+          "change"
+        ],
+        "options": {
+          "awaitWriteFinish": true,
+          "usePolling": true,
+          "depth": 0,
+          "ignored": "**/{done,rejected,failed}/**"
+        }
+      },
+      "id": "3f85d28b-8fdb-5e4e-8832-701188abc145",
+      "name": "Thả file vào inbox",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "96c8567d-e784-52e6-95cb-a3bfd53a850a",
+              "leftValue": "={{ $json.path }}",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              },
+              "rightValue": ".md"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a9949e35-f89a-5686-ad2d-9bc788076067",
+      "name": "Chỉ file .md",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/inbox/episodes",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.path }) }}"
+      },
+      "id": "b4095380-eedb-567d-98f5-9e660a392961",
+      "name": "Tạo episode (inbox)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "podcast/upload",
+        "responseMode": "onReceived",
+        "options": {
+          "responseData": "Đã nhận kịch bản, đang xử lý."
+        }
+      },
+      "id": "84e2b9d4-ba0c-5b27-841b-d13d261425d3",
+      "name": "Upload kịch bản (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        260
+      ],
+      "webhookId": "6dc0d74e-eab7-54c9-926a-a549e0097d2d"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "={{ Object.keys($binary)[0] }}"
+            }
+          ]
+        }
+      },
+      "id": "c292f6b3-8638-5454-aa95-35103e181287",
+      "name": "Tạo episode (webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "602eb0cc-d301-5d20-a8a6-7e140397eda9",
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 201
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ae438ad2-a7b4-52e4-87aa-c46284aaf5b7",
+      "name": "Kịch bản hợp lệ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8fe59721-190d-5f9d-bd30-93b45c886a3a",
+              "name": "episode_id",
+              "value": "={{ $json.body.episode.id }}",
+              "type": "string"
+            },
+            {
+              "id": "36187177-bc77-5b48-bf35-7435f5e226b3",
+              "name": "inbox_file",
+              "value": "={{ $json.body.inbox_file || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "2d5315f2-e46e-502d-a078-9900a201158c",
+              "name": "title",
+              "value": "={{ $json.body.summary.title || $json.body.episode.id }}",
+              "type": "string"
+            },
+            {
+              "id": "5e5800f4-6093-5d13-8802-6f024f311a1b",
+              "name": "warnings",
+              "value": "={{ ($json.body.warnings || []).join('\\n') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2fb5a0de-c5a9-5d6f-96ad-af2bf570831f",
+      "name": "Episode",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/tts/health",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "d53ed199-5e0c-5842-b4cf-3362f73b50ad",
+      "name": "Kiểm tra Voice Studio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "052160b3-3a7a-59c4-8256-7aa638801a4a",
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 200
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ee4b660d-ecfa-573a-8af8-9833888730ef",
+      "name": "Voice Studio sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/pipeline/run",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "89892e21-f695-5fff-950c-1a5bb03317af",
+      "name": "Chạy pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cd525eec-80b0-5225-9dcd-a28ff05ba82d",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e3ca09c7-3724-5df6-812e-82ea1f9b712a",
+      "name": "Job",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "c6bb7391-9c55-5b78-9d74-bd758ea0ea3d",
+      "name": "Đợi 15 giây",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        80
+      ],
+      "webhookId": "71091d2c-fbbb-5c82-ac8c-838382bb7d75"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/jobs/{{ $('Job').item.json.job_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "37832ed0-d2d5-5282-9e6c-458dd543de85",
+      "name": "Trạng thái job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e784ff84-12de-55c7-ac5a-1dbd811d5733",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "succeeded"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "xong"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d460d2bc-be03-5648-82cd-02095cbb4178",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "failed"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lỗi"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "đang chạy"
+        }
+      },
+      "id": "d03ea2dd-7bdb-597c-90a2-592a63135883",
+      "name": "Phân loại trạng thái",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2420,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cceffdaa-6c8b-5e8b-97fc-24713da91cc2",
+              "leftValue": "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": "={{ Number($env.PIPELINE_TIMEOUT_MIN || 120) }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1368c6b1-bb25-58ce-a85d-7abbaa945862",
+      "name": "Quá thời gian?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/summary",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ebcf493a-1b16-5f4a-9bc5-c271c9665c54",
+      "name": "Tóm tắt tập",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst s = $input.first().json;\nconst body = (s.description_body || '').slice(0, 700);\nconst shorts = (s.shorts || []).map((c, i) => `  ${i + 1}. ${esc(c.url)}`).join('\\n');\nconst text = [\n  '🎙 <b>Bản nháp podcast mới</b>',\n  `<b>${esc(s.title)}</b>  (${esc(s.duration_text)})`,\n  '',\n  esc(body) + (s.description_body && s.description_body.length > 700 ? '…' : ''),\n  '',\n  `<b>Chương</b>\\n${esc(s.chapters_text)}`,\n  '',\n  `📺 Video: ${esc(s.urls.video)}`,\n  `🖼 Thumbnail: ${esc(s.urls.thumbnail)}`,\n  `🎧 Audio: ${esc(s.urls.audio)}`,\n  shorts ? `📱 Shorts:\\n${shorts}` : '',\n  '',\n  'Bấm <b>Duyệt</b> để upload YouTube (riêng tư), hoặc <b>Từ chối</b>.',\n].join('\\n');\n// n8n 2.x resume URLs already carry ?signature=..., so append with & when needed\nconst base = $execution.resumeUrl;\nconst sep = base.includes('?') ? '&' : '?';\nreturn [{ json: { text, approve_url: `${base}${sep}decision=approve`, reject_url: `${base}${sep}decision=reject` } }];"
+      },
+      "id": "27dded7f-1030-50f2-9387-9d0bcb672898",
+      "name": "Soạn bản nháp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Duyệt",
+                    "additionalFields": {
+                      "url": "={{ $json.approve_url }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Từ chối",
+                    "additionalFields": {
+                      "url": "={{ $json.reject_url }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "2e7b02f3-cc93-5bd3-bac7-417f100acc19",
+      "name": "Gửi bản nháp",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3080,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "GET",
+        "responseMode": "onReceived",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 48,
+        "resumeUnit": "hours",
+        "options": {
+          "ignoreBots": true,
+          "responseData": "Đã ghi nhận lựa chọn của bạn. Có thể đóng trang này."
+        }
+      },
+      "id": "6885c361-8e5d-5a8c-90b7-b91ef877d741",
+      "name": "Chờ duyệt",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3300,
+        -100
+      ],
+      "webhookId": "20481b5e-b85e-57d7-8cb5-7e1a01df8cb3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "59cfdc98-c0ca-541f-bf17-9606fccd9b16",
+              "leftValue": "={{ $json.query?.decision ?? '' }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "approve"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9d94803b-8c37-505c-be79-879b9675b9f2",
+      "name": "Được duyệt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Tóm tắt tập').item.json.paths.video }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "fd8af357-471e-5699-8b77-b03e9a3047f4",
+      "name": "Đọc video",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Tóm tắt tập').item.json.title }}",
+        "regionCode": "VN",
+        "categoryId": "={{ $env.YOUTUBE_CATEGORY_ID || '22' }}",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ $('Tóm tắt tập').item.json.description }}",
+          "tags": "={{ $('Tóm tắt tập').item.json.tags_csv }}",
+          "privacyStatus": "={{ $env.YOUTUBE_PRIVACY || 'private' }}",
+          "defaultLanguage": "vi",
+          "selfDeclaredMadeForKids": false,
+          "notifySubscribers": false
+        }
+      },
+      "id": "060bb5fa-3b3c-5c4c-934a-9bfb280f2479",
+      "name": "Upload YouTube",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        3960,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Tóm tắt tập').item.json.urls.srt.replace(/^https?:\\/\\/[^/]+/, $env.MEDIA_SERVICE_URL) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "1a310562-efb9-59bb-8abb-90df1cc315fa",
+      "name": "Lấy phụ đề SRT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const boundary = 'podcast_studio_srt';\nconst videoId = $('Upload YouTube').first().json.id;\nconst meta = { snippet: { videoId, language: 'vi', name: 'Tiếng Việt', isDraft: false } };\nconst srt = $input.first().json.data;\nconst body = `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n` +\n  `${JSON.stringify(meta)}\\r\\n--${boundary}\\r\\nContent-Type: application/x-subrip\\r\\n\\r\\n` +\n  `${srt}\\r\\n--${boundary}--`;\nreturn [{ json: { body, boundary, videoId } }];"
+      },
+      "id": "38da9c2a-f5a6-59ca-9916-7a9e3dea852a",
+      "name": "Soạn phụ đề",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "=multipart/related; boundary={{ $json.boundary }}",
+        "body": "={{ $json.body }}"
+      },
+      "id": "039cba3d-6d07-55b5-94f0-955f4d44cafa",
+      "name": "Upload phụ đề",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/inbox/archive",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $('Episode').item.json.inbox_file, to: 'done' }) }}"
+      },
+      "id": "f9e2caec-6df1-5caf-89d7-8a6cd8a7f45d",
+      "name": "Chuyển script vào done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e89401f5-3bde-5fb2-acea-d3a08e535ed3",
+              "name": "text",
+              "value": "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n{{ $('Tóm tắt tập').item.json.title }}\nhttps://youtu.be/{{ $('Upload YouTube').item.json.id }}\nPhụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : 'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5677f6f9-5c5b-5f5d-ac80-3f6d028c8209",
+      "name": "Tin đã đăng",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5060,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/inbox/archive",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $('Episode').item.json.inbox_file, to: 'rejected' }) }}"
+      },
+      "id": "a49ac6a6-1b88-5af1-b0c9-0ce60eed4d1b",
+      "name": "Chuyển script vào rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9153ea15-d6e3-51de-901d-bd47d794bafc",
+              "name": "text",
+              "value": "={{ $('Chờ duyệt').item.json.query?.decision === 'reject' ? '🚫 Đã từ chối' : '⌛ Hết 48 giờ chưa duyệt, đã bỏ qua' }}: {{ $('Tóm tắt tập').item.json.title }}\nKhông upload YouTube.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "71d8184a-a533-5074-bed0-34fdf837fcbc",
+      "name": "Tin từ chối",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3960,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "beaad814-adfe-55db-ac5b-95b3d714b8a6",
+              "name": "step",
+              "value": "Đọc kịch bản",
+              "type": "string"
+            },
+            {
+              "id": "b2b6e6ce-9582-54d4-903b-cfafa3d0b386",
+              "name": "detail",
+              "value": "={{ typeof $json.body?.detail === 'string' ? $json.body.detail : JSON.stringify($json.body ?? $json.error ?? 'Không gọi được media-service') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7c168d2-95df-5c80-a9ca-a792dc0b6c6f",
+      "name": "Lỗi kịch bản",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bac62440-bd90-5b8b-880e-a54145565f11",
+              "name": "step",
+              "value": "Kiểm tra Voice Studio",
+              "type": "string"
+            },
+            {
+              "id": "38bf03de-c2b5-54e5-8a06-45c86ecd4523",
+              "name": "detail",
+              "value": "={{ $json.body?.message || 'Voice Studio không phản hồi' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5b19a215-b9e9-5c14-9182-7e5d6d535d95",
+      "name": "Lỗi Voice Studio",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ae8a0a21-1dad-5b26-80bb-e4f7c0d18647",
+              "name": "step",
+              "value": "={{ $json.step_label || $json.step || 'pipeline' }}",
+              "type": "string"
+            },
+            {
+              "id": "327d914e-a97b-5326-8059-e3a8de05f1e6",
+              "name": "detail",
+              "value": "={{ $json.error?.message || 'Không rõ lỗi' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "83588475-48e5-5ae7-868b-61efa04ce8bb",
+      "name": "Lỗi pipeline",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2640,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "229d233c-26a1-5513-b339-98e57f1f15eb",
+              "name": "step",
+              "value": "={{ $json.step_label || 'pipeline' }}",
+              "type": "string"
+            },
+            {
+              "id": "7ca8d3e5-8638-5e42-b3f5-8af12f316910",
+              "name": "detail",
+              "value": "={{ 'Pipeline chạy quá ' + ($env.PIPELINE_TIMEOUT_MIN || 120) + ' phút' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "788e5562-ac7d-530d-a286-255fafd6752c",
+      "name": "Lỗi quá thời gian",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7e6018a3-1083-5542-8405-a7c1276dbfa6",
+      "name": "Lỗi bất ngờ",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "440c88f8-f66b-5c0e-8d53-9526236e8dc5",
+              "name": "step",
+              "value": "={{ $json.execution?.lastNodeExecuted || 'n8n' }}",
+              "type": "string"
+            },
+            {
+              "id": "d3a9aca8-1c46-59d3-b649-41292392e8a3",
+              "name": "detail",
+              "value": "={{ $json.execution?.error?.message || 'Lỗi không rõ' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c423c9a9-fcf2-5555-9c00-5c571f404c3f",
+      "name": "Lỗi workflow",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst e = $input.first().json;\nlet file = '';\ntry { file = $('Episode').first().json.inbox_file || $('Episode').first().json.episode_id; } catch (_) {}\nif (!file) { try { file = $('Thả file vào inbox').first().json.path; } catch (_) {} }\nconst text = [\n  `❌ <b>Lỗi ở bước: ${esc(e.step)}</b>`,\n  file ? `Tập: ${esc(file)}` : '',\n  '',\n  `<pre>${esc(String(e.detail).slice(0, 3000))}</pre>`,\n].filter((x, i) => x !== '' || i === 2).join('\\n');\nreturn [{ json: { text } }];"
+      },
+      "id": "065da8a1-bde2-58cb-813b-df52a8bdd004",
+      "name": "Soạn tin lỗi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "f8e6f4fb-a25d-582a-8ac4-04e6dbc8626b",
+      "name": "Gửi thông báo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Thả file vào inbox": {
+      "main": [
+        [
+          {
+            "node": "Chỉ file .md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chỉ file .md": {
+      "main": [
+        [
+          {
+            "node": "Tạo episode (inbox)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo episode (inbox)": {
+      "main": [
+        [
+          {
+            "node": "Kịch bản hợp lệ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload kịch bản (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Tạo episode (webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo episode (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Kịch bản hợp lệ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kịch bản hợp lệ?": {
+      "main": [
+        [
+          {
+            "node": "Episode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lỗi kịch bản",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Episode": {
+      "main": [
+        [
+          {
+            "node": "Kiểm tra Voice Studio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kiểm tra Voice Studio": {
+      "main": [
+        [
+          {
+            "node": "Voice Studio sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Studio sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "Chạy pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lỗi Voice Studio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chạy pipeline": {
+      "main": [
+        [
+          {
+            "node": "Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job": {
+      "main": [
+        [
+          {
+            "node": "Đợi 15 giây",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đợi 15 giây": {
+      "main": [
+        [
+          {
+            "node": "Trạng thái job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trạng thái job": {
+      "main": [
+        [
+          {
+            "node": "Phân loại trạng thái",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phân loại trạng thái": {
+      "main": [
+        [
+          {
+            "node": "Tóm tắt tập",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lỗi pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quá thời gian?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quá thời gian?": {
+      "main": [
+        [
+          {
+            "node": "Lỗi quá thời gian",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Đợi 15 giây",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tóm tắt tập": {
+      "main": [
+        [
+          {
+            "node": "Soạn bản nháp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soạn bản nháp": {
+      "main": [
+        [
+          {
+            "node": "Gửi bản nháp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gửi bản nháp": {
+      "main": [
+        [
+          {
+            "node": "Chờ duyệt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chờ duyệt": {
+      "main": [
+        [
+          {
+            "node": "Được duyệt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Được duyệt?": {
+      "main": [
+        [
+          {
+            "node": "Đọc video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chuyển script vào rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đọc video": {
+      "main": [
+        [
+          {
+            "node": "Upload YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload YouTube": {
+      "main": [
+        [
+          {
+            "node": "Lấy phụ đề SRT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy phụ đề SRT": {
+      "main": [
+        [
+          {
+            "node": "Soạn phụ đề",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soạn phụ đề": {
+      "main": [
+        [
+          {
+            "node": "Upload phụ đề",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload phụ đề": {
+      "main": [
+        [
+          {
+            "node": "Chuyển script vào done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chuyển script vào done": {
+      "main": [
+        [
+          {
+            "node": "Tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tin đã đăng": {
+      "main": [
+        [
+          {
+            "node": "Gửi thông báo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chuyển script vào rejected": {
+      "main": [
+        [
+          {
+            "node": "Tin từ chối",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tin từ chối": {
+      "main": [
+        [
+          {
+            "node": "Gửi thông báo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi kịch bản": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi Voice Studio": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi pipeline": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi quá thời gian": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi workflow": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lỗi bất ngờ": {
+      "main": [
+        [
+          {
+            "node": "Lỗi workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soạn tin lỗi": {
+      "main": [
+        [
+          {
+            "node": "Gửi thông báo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PodcastPipeline1",
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

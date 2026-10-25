@@ -9,12 +9,15 @@ from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 
+from app import inbox
 from app.config import get_settings, load_brand
 from app.episodes import EpisodeNotFound, EpisodeStore
 from app.jobs import EpisodeBusyError, Job, JobManager
 from app.pipeline import PIPELINE, STEPS, StepEnv, run_steps
 from app.script import ScriptParseError
+from app.summary import build_summary
 from app.tts import TTSError, get_provider
 
 settings = get_settings()
@@ -97,13 +100,20 @@ async def create_episode(
         raw, filename = script.encode("utf-8"), None
     else:
         raise HTTPException(400, "Gửi kịch bản qua trường 'file' (multipart) hoặc 'script'.")
+    return _create(request, _decode(raw), filename)
+
+
+def _decode(raw: bytes) -> str:
     try:
-        text = raw.decode("utf-8")
+        return raw.decode("utf-8")
     except UnicodeDecodeError:
         try:
-            text = raw.decode("utf-16")
+            return raw.decode("utf-16")
         except UnicodeDecodeError:
             raise HTTPException(422, "File kịch bản phải được lưu dạng UTF-8.") from None
+
+
+def _create(request: Request, text: str, filename: str | None) -> dict:
     info, parsed = store(request).create(text, filename)
     return {
         "episode": info.model_dump(mode="json"),
@@ -118,6 +128,33 @@ async def create_episode(
     }
 
 
+class InboxRequest(BaseModel):
+    path: str = Field(description="Tên file hoặc đường dẫn /data/inbox/<file>.md")
+
+
+class ArchiveRequest(InboxRequest):
+    to: Literal["done", "rejected", "failed"] = "done"
+
+
+@app.post("/inbox/episodes", status_code=201)
+async def create_from_inbox(request: Request, body: InboxRequest) -> dict:
+    """Create an episode from a script dropped in data/inbox (used by the n8n trigger)."""
+    try:
+        path = inbox.resolve(settings.data_dir, body.path)
+    except inbox.InboxError as e:
+        raise HTTPException(404, str(e)) from e
+    return {**_create(request, _decode(path.read_bytes()), path.name), "inbox_file": path.name}
+
+
+@app.post("/inbox/archive")
+async def archive_inbox(body: ArchiveRequest) -> dict:
+    try:
+        dest = inbox.archive(settings.data_dir, body.path, body.to)
+    except inbox.InboxError as e:
+        raise HTTPException(404, str(e)) from e
+    return {"moved_to": str(dest.relative_to(settings.data_dir).as_posix())}
+
+
 @app.get("/episodes")
 async def list_episodes(request: Request) -> list[dict]:
     return [i.model_dump(mode="json") for i in store(request).list()]
@@ -130,6 +167,14 @@ async def get_episode(request: Request, episode_id: str) -> dict:
         "episode": info.model_dump(mode="json"),
         "jobs": [j.model_dump(mode="json") for j in jobs(request).list(episode_id, limit=10)],
     }
+
+
+@app.get("/episodes/{episode_id}/summary")
+async def episode_summary(request: Request, episode_id: str) -> dict:
+    """Title, description, tags and public links of the outputs (Telegram / YouTube)."""
+    st = store(request)
+    st.get(episode_id)
+    return build_summary(st.paths(episode_id).root, episode_id, settings.media_public_url)
 
 
 @app.get("/episodes/{episode_id}/files")
@@ -212,11 +257,14 @@ async def pipeline_run(request: Request, episode_id: str, force: bool = False) -
 
 
 @app.get("/jobs/{job_id}")
-async def get_job(request: Request, job_id: str) -> Job:
+async def get_job(request: Request, job_id: str) -> dict:
     job = jobs(request).get(job_id)
     if not job:
         raise HTTPException(404, f"Không tìm thấy job '{job_id}'.")
-    return job
+    data = job.model_dump(mode="json")
+    step = STEPS.get(job.step or "")
+    data["step_label"] = step.label if step else job.step
+    return data
 
 
 @app.get("/jobs")

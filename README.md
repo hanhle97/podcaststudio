@@ -94,6 +94,45 @@ Mở link, đăng nhập, dán mã vào terminal. Token `sk-ant-oat01-…` in ra
 - `thumbnail.png` 1280×720: ảnh nền đầu tiên trong `assets/backgrounds/` (hoặc gradient), logo,
   text thumbnail đầu tiên.
 
+## n8n: tự động từ inbox đến YouTube
+
+Workflow `n8n/workflows/podcast_pipeline.json` (sinh ra từ `n8n/build_workflow.py`):
+
+1. **Trigger**: thả `*.md` vào `data/inbox/` (sửa và lưu lại file cũng chạy lại), hoặc
+   `curl -F file=@script.md http://localhost:5678/webhook/podcast/upload`.
+2. Tạo episode → kiểm tra `/tts/health` → `/pipeline/run` → poll `/jobs/{id}` mỗi 15 giây
+   (bỏ cuộc sau `PIPELINE_TIMEOUT_MIN` phút).
+3. Gửi bản nháp qua Telegram: tiêu đề, mô tả, chương, link video/Shorts/thumbnail, nút
+   **Duyệt** / **Từ chối**. Workflow chờ tối đa 48 giờ.
+4. Duyệt → upload YouTube (`YOUTUBE_PRIVACY`, mặc định private) kèm mô tả có chương và phụ đề
+   SRT → script chuyển vào `data/inbox/done/`. Từ chối → `data/inbox/rejected/`.
+5. Lỗi ở bất kỳ bước nào → Telegram ghi rõ bước và lý do (ví dụ "Dòng 6: Tag [pasue 2s] không hợp lệ").
+
+### Cấu hình lần đầu (credentials không nằm trong repo)
+
+1. Mở http://localhost:5678 và tạo tài khoản owner của n8n.
+2. **Telegram**: nhắn @BotFather `/newbot` để lấy bot token. Trong n8n: *Credentials → Create →
+   Telegram API*, dán token. Nhắn một tin cho bot của bạn, rồi lấy chat id (nhắn @userinfobot) và
+   đặt `TELEGRAM_CHAT_ID=` trong `.env`.
+3. **YouTube**: trong Google Cloud Console tạo project → bật *YouTube Data API v3* → *OAuth
+   consent screen* (External, thêm email của bạn vào Test users) → *Credentials → OAuth client
+   ID* (Web application), Authorized redirect URI lấy từ hộp thoại credential của n8n
+   (`http://localhost:5678/rest/oauth2-credential/callback`). Trong n8n: *Credentials → Create →
+   YouTube OAuth2 API*, dán Client ID/Secret, bấm *Sign in with Google*.
+4. **Nút Duyệt trên điện thoại**: link trong nút phải mở được từ điện thoại.
+   - Cùng WiFi: `N8N_WEBHOOK_URL=http://<IP-LAN-của-máy>:5678/` và
+     `MEDIA_PUBLIC_URL=http://<IP-LAN-của-máy>:8000` (mở cổng 5678, 8000 trong Windows Firewall).
+   - Ở ngoài: dùng Cloudflare Tunnel / ngrok và đặt hai biến trên theo URL công khai.
+5. Áp dụng và import workflow (tự gắn credential Telegram/YouTube vừa tạo):
+
+```bash
+docker compose up -d
+sh n8n/import_workflow.sh
+```
+
+Sửa workflow: chỉnh `n8n/build_workflow.py` rồi chạy lại `sh n8n/import_workflow.sh`. Sửa trực
+tiếp trong giao diện n8n cũng được, nhưng sẽ bị ghi đè ở lần import sau.
+
 ## Video (Remotion)
 
 Hai composition trong `remotion/src/compositions/`: `PodcastLandscape` (1920×1080, 30fps)
