@@ -1,188 +1,381 @@
 # Auto Podcast Studio
 
-Sản xuất video podcast tiếng Việt từ **một file `script.md`**: giọng clone qua Voice Studio,
-nhạc nền có ducking, animation nhẹ (Remotion) và phụ đề. Chạy local bằng Docker, n8n điều phối.
+Sản xuất video podcast tiếng Việt từ **một file `script.md`**. Bạn chỉ viết kịch bản; hệ thống tự
+làm giọng đọc (giọng clone của bạn qua Voice Studio), nhạc nền có ducking, phụ đề khớp từng chữ,
+video 16:9 + Shorts 9:16 có animation nhẹ, metadata YouTube, thumbnail, gửi bản nháp qua Telegram
+và upload YouTube khi bạn bấm **Duyệt**. Chạy local bằng Docker, n8n điều phối.
 
-> README đang được hoàn thiện theo từng phase. Trạng thái hiện tại: **Phase 1 – scaffold + parser**.
+**Mỗi tập cho ra** (trong `data/episodes/<id>/`):
 
-## Chạy nhanh
+| File | Nội dung |
+|---|---|
+| `episode_16x9.mp4` | video 1920×1080, 30fps |
+| `shorts/clip_01..05_9x16.mp4` | 3–5 clip dọc 1080×1920, 30–60 giây (tập ngắn thì ít hơn) |
+| `final_audio.mp3` / `.wav` | bản audio podcast, -16 LUFS |
+| `subtitles.srt` / `.ass`, `words.json`, `karaoke.json` | phụ đề và timing từng từ |
+| `metadata.json` | tiêu đề, mô tả, chương `00:00 Tên`, tags, 3 phương án text thumbnail |
+| `thumbnail.png` | 1280×720 |
+
+---
+
+## Mục lục
+
+1. [Cách hoạt động](#1-cách-hoạt-động)
+2. [Cài đặt](#2-cài-đặt)
+3. [Cấu hình](#3-cấu-hình)
+4. [Viết kịch bản](#4-viết-kịch-bản)
+5. [Sử dụng hằng ngày](#5-sử-dụng-hằng-ngày)
+6. [Nhạc, nền, logo, font, brand](#6-nhạc-nền-logo-font-brand)
+7. [Kiểm thử](#7-kiểm-thử)
+8. [Xử lý sự cố](#8-xử-lý-sự-cố)
+9. [Cấu trúc repo và API](#9-cấu-trúc-repo-và-api)
+
+---
+
+## 1. Cách hoạt động
+
+```
+data/inbox/tap.md ─▶ n8n ─▶ media-service (FastAPI)
+                              parse → tts → mix → align → subtitles → metadata → clips → thumbnail → render
+                     n8n ◀── /jobs/{id}
+                     Telegram: bản nháp + [Duyệt] [Từ chối]
+                     Duyệt ─▶ YouTube (private, có chương + phụ đề) ─▶ data/inbox/done/
+```
+
+| Bước | Làm gì |
+|---|---|
+| **parse** | đọc kịch bản, báo lỗi theo dòng/cột kèm gợi ý |
+| **tts** | gọi Voice Studio từng câu, áp dụng từ điển phát âm; cache theo hash nên sửa 1 câu chỉ tạo lại câu đó |
+| **mix** | ghép câu với khoảng nghỉ chuẩn, xử lý nhẹ (highpass, compressor), nhạc nền có ducking, loudnorm 2-pass |
+| **align** | faster-whisper (GPU nếu có) lấy timing từng từ, căn với chữ trong kịch bản |
+| **subtitles** | SRT (≤ 42 ký tự/dòng, ≤ 2 dòng), ASS karaoke, karaoke.json |
+| **metadata** | Claude viết tiêu đề, mô tả, tags; chương lấy từ `##` (không có heading thì Claude chia) |
+| **clips** | Claude chọn 3–5 đoạn Shorts theo ranh giới câu |
+| **thumbnail** | Pillow, 1280×720 |
+| **render** | Remotion: nền, waveform, phụ đề tô từ đang đọc, tên chương, progress bar |
+
+Mỗi bước có thể chạy lại riêng. `pipeline/run` bỏ qua bước nào kết quả còn hợp lệ (đầu vào không
+đổi), nên chạy lại một tập không sửa gì thì xong ngay.
+
+---
+
+## 2. Cài đặt
+
+**Cần có**
+
+- Windows 10/11 (hoặc Linux/macOS) với **Docker Desktop**. Trên Windows cần **WSL 2**: mở
+  Terminal (Admin) chạy `wsl --install --no-distribution` rồi khởi động lại máy.
+- **Voice Studio** (OmniVoice) đã clone giọng của bạn, chạy trên máy này hoặc máy khác trong LAN.
+- Gói **Claude subscription** (dùng Claude Code để viết metadata), không cần API key.
+- Tùy chọn: GPU NVIDIA để faster-whisper chạy nhanh (driver Windows mới, Docker Desktop tự chuyển GPU vào container).
+
+**Chạy lần đầu**
 
 ```bash
-cp .env.example .env        # điền VOICE_STUDIO_*, ANTHROPIC_API_KEY
-docker compose up -d --build
-curl http://localhost:8000/health
-curl -F "file=@examples/script_demo.md" http://localhost:8000/episodes
+git clone <repo> podcast-studio && cd podcast-studio
+cp .env.example .env
 ```
+
+Mở `.env`, điền tối thiểu `VOICE_STUDIO_URL` và `VOICE_STUDIO_VOICE_ID` (xem mục 3), đặt
+`COMPOSE_PROFILES=gpu` nếu có GPU NVIDIA, rồi:
+
+```bash
+docker compose up -d --build
+curl http://localhost:8000/health        # {"ok":true}
+curl http://localhost:8000/tts/health    # Voice Studio sẵn sàng?
+```
+
+Lần build đầu mất 10–20 phút (ffmpeg, Node, Chromium, Remotion, CUDA). Lần chạy align đầu tiên tải
+model whisper (~1,6 GB) vào volume `whisper_models`.
 
 - Media service: http://localhost:8000/docs (Swagger)
 - n8n: http://localhost:5678
 
-GPU (faster-whisper trên CUDA): đặt `COMPOSE_PROFILES=gpu` trong `.env`.
+Tên container là `media-service-cpu` hoặc `media-service-gpu` tùy `COMPOSE_PROFILES`; các lệnh bên
+dưới ghi `media-service-gpu`, đổi thành `-cpu` nếu bạn dùng CPU.
 
-## Voice Studio (giọng clone)
+---
 
-Voice Studio (OmniVoice) phải **đang mở** khi chạy pipeline. API của nó tương thích OpenAI
-(`POST /v1/audio/speech`), cổng mặc định 3900, gọi từ máy này không cần key.
+## 3. Cấu hình
+
+Mọi biến nằm trong `.env` (mẫu ở `.env.example`, có comment). File `.env` không được commit.
+
+### 3.1 Voice Studio
+
+Voice Studio phải **đang mở** khi chạy pipeline. API tương thích OpenAI (`POST /v1/audio/speech`),
+cổng mặc định 3900, gọi từ cùng máy không cần key.
 
 | Voice Studio chạy ở đâu | `VOICE_STUDIO_URL` |
 |---|---|
 | Cùng máy với Docker | `http://host.docker.internal:3900` (ghi `http://localhost:3900` cũng được, service tự đổi) |
-| Máy khác trong LAN | `http://192.168.x.x:3900`, bật **Settings → Sharing & Remote Access** trong Voice Studio và đặt `VOICE_STUDIO_API_KEY` nếu bên đó dùng `OMNIVOICE_API_KEY` |
+| Máy khác trong LAN | `http://192.168.x.x:3900`; bật *Settings → Sharing & Remote Access* trong Voice Studio, và đặt `VOICE_STUDIO_API_KEY` nếu bên đó dùng `OMNIVOICE_API_KEY` |
 
-`VOICE_STUDIO_VOICE_ID` là id giọng clone (xem bằng `GET {url}/v1/audio/voices`).
-Kiểm tra kết nối:
-
-```bash
-curl http://localhost:8000/tts/health
-docker compose exec media-service-cpu python scripts/probe_voice_studio.py   # hoặc media-service-gpu
-```
-
-Giọng được cache theo hash (text + voice + tham số) trong `data/cache/tts/`, nên sửa một câu
-chỉ tạo lại câu đó. `config/pronunciation.yaml` đổi cách đọc (ví dụ `n8n` → "en ây en")
-nhưng phụ đề vẫn hiện chữ gốc. Người nói khác (`[Lan]: ...`) gán giọng trong
-`brand.yaml` → `tts.voices`.
-
-## Nhạc nền
-
-Bỏ file nhạc **có license** vào `assets/music/` (mp3/wav/m4a/ogg/flac). Mỗi tập dùng bài ghi trong
-frontmatter (`music: ten_bai.mp3`), nếu không ghi thì chọn ngẫu nhiên, nhưng cố định theo tập
-nên chạy lại vẫn ra cùng bài. Bài ngắn hơn giọng sẽ được loop.
-
-> `assets/music/placeholder_ambient.mp3` chỉ là tone sine tạo bằng ffmpeg để test.
-> Hãy xóa nó và thay bằng nhạc của bạn.
-
-Mức nhạc chỉnh trong `brand.yaml` → `audio.music`:
-- `level_db`: nhạc nằm dưới giọng bao nhiêu dB khi đang nói (mặc định -22).
-- `duck_db`: nhạc lên bao nhiêu ở `[music up]` và giữa chapter (mặc định 10).
-- `duck_release_ms`: nhạc lên chậm hay nhanh khi giọng dừng. Khoảng nghỉ ngắn giữa câu hầu như không làm nhạc đổi mức.
-- `intro` / `outro`: file trong `assets/music/`, nối bằng crossfade.
-
-## Timing từng từ và phụ đề
-
-Phụ đề **luôn là chữ trong kịch bản**, không dùng LLM sửa. faster-whisper chỉ được dùng để lấy
-timing: chạy trên clip riêng của từng câu, rồi căn chỉnh với từ trong kịch bản. Từ nào whisper nghe
-lệch thì lấy khoảng thời gian whisper nghe được; từ nào không nghe thấy thì nội suy theo số ký tự.
-Mức khớp ghi trong `align_report.json`.
-
-- `WHISPER_MODEL=large-v3-turbo` (mặc định). Model tải về volume `whisper_models` ở lần chạy đầu.
-- `WHISPER_DEVICE=auto` dùng CUDA nếu có, không thì CPU. Với GPU, đặt `COMPOSE_PROFILES=gpu`
-  (cần Docker Desktop + WSL2 + driver NVIDIA). Trên RTX 5060 Ti, align tập 1 phút mất ~14 giây.
-
-Đầu ra: `words.json` (`[{word, start, end, sentence_id, chapter}]`), `subtitles.srt` (≤ 42 ký
-tự/dòng, ≤ 2 dòng, ngắt theo câu và dấu phẩy, không vắt chapter), `subtitles.ass` + `karaoke.json`
-(cụm 2–4 từ, tô sáng từng từ, cho Shorts).
-
-## LLM: metadata, chapters, chọn clip (Claude Code subscription)
-
-LLM chạy qua **Claude Code CLI** (cài sẵn trong image) bằng gói Claude subscription của bạn,
-không cần API key. Tạo token một lần:
+`VOICE_STUDIO_VOICE_ID` là id giọng clone. Xem danh sách: `curl http://localhost:3900/v1/audio/voices`.
+Thử kết nối và nghe một câu mẫu:
 
 ```bash
-docker compose exec -it media-service-gpu claude setup-token   # hoặc media-service-cpu
+docker compose exec media-service-gpu python scripts/probe_voice_studio.py
 ```
 
-Mở link, đăng nhập, dán mã vào terminal. Token `sk-ant-oat01-…` in ra thì dán vào `.env`
-(`CLAUDE_CODE_OAUTH_TOKEN=`), rồi chạy `docker compose up -d` để nạp lại. Đổi model bằng
-`LLM_MODEL` (mặc định `sonnet`). Mỗi tập gọi khoảng 2–3 lần, trừ vào hạn mức subscription.
+Giọng đọc dùng `seed` cố định (`brand.yaml` → `tts.seed`) để cùng một câu luôn ra cùng giọng.
 
-- `metadata.json`: tiêu đề (dùng `title` trong frontmatter nếu có, không thì ≤ 70 ký tự), mô tả
-  kèm mục lục YouTube `00:00 Tên`, 10–15 tags, 3 phương án text thumbnail. Chapters lấy từ `##`
-  kèm timestamp thật; chỉ khi không có heading thì LLM mới chia (mỗi chương ≥ 10 giây).
-- `clips.json`: 3–5 đoạn 30–60 giây cho Shorts (tập ngắn thì ít hơn). LLM chọn theo **id câu**,
-  nên timestamp luôn khớp ranh giới câu; code kiểm tra độ dài và chồng lấn.
-- Mọi output được validate bằng Pydantic; sai thì hỏi lại kèm lỗi (tối đa 3 lần).
-- `thumbnail.png` 1280×720: ảnh nền đầu tiên trong `assets/backgrounds/` (hoặc gradient), logo,
-  text thumbnail đầu tiên.
+### 3.2 Claude (metadata, chương, chọn clip)
 
-## n8n: tự động từ inbox đến YouTube
+Chạy qua Claude Code CLI có sẵn trong image, dùng gói subscription của bạn. Tạo token một lần:
 
-Workflow `n8n/workflows/podcast_pipeline.json` (sinh ra từ `n8n/build_workflow.py`):
+```bash
+docker compose exec -it media-service-gpu claude setup-token
+```
 
-1. **Trigger**: thả `*.md` vào `data/inbox/` (sửa và lưu lại file cũng chạy lại), hoặc
-   `curl -F file=@script.md http://localhost:5678/webhook/podcast/upload`.
-2. Tạo episode → kiểm tra `/tts/health` → `/pipeline/run` → poll `/jobs/{id}` mỗi 15 giây
-   (bỏ cuộc sau `PIPELINE_TIMEOUT_MIN` phút).
-3. Gửi bản nháp qua Telegram: tiêu đề, mô tả, chương, link video/Shorts/thumbnail, nút
-   **Duyệt** / **Từ chối**. Workflow chờ tối đa 48 giờ.
-4. Duyệt → upload YouTube (`YOUTUBE_PRIVACY`, mặc định private) kèm mô tả có chương và phụ đề
-   SRT → script chuyển vào `data/inbox/done/`. Từ chối → `data/inbox/rejected/`.
-5. Lỗi ở bất kỳ bước nào → Telegram ghi rõ bước và lý do (ví dụ "Dòng 6: Tag [pasue 2s] không hợp lệ").
+Mở link, đăng nhập, dán mã vào terminal. Token `sk-ant-oat01-…` in ra thì dán vào
+`.env` → `CLAUDE_CODE_OAUTH_TOKEN=`, rồi `docker compose up -d`. Đổi model bằng `LLM_MODEL`
+(mặc định `sonnet`). Mỗi tập gọi 2–3 lần, trừ vào hạn mức subscription.
 
-### Cấu hình lần đầu (credentials không nằm trong repo)
+### 3.3 n8n, Telegram, YouTube
 
-1. Mở http://localhost:5678 và tạo tài khoản owner của n8n.
-2. **Telegram**: nhắn @BotFather `/newbot` để lấy bot token. Trong n8n: *Credentials → Create →
-   Telegram API*, dán token. Nhắn một tin cho bot của bạn, rồi lấy chat id (nhắn @userinfobot) và
-   đặt `TELEGRAM_CHAT_ID=` trong `.env`.
-3. **YouTube**: trong Google Cloud Console tạo project → bật *YouTube Data API v3* → *OAuth
-   consent screen* (External, thêm email của bạn vào Test users) → *Credentials → OAuth client
-   ID* (Web application), Authorized redirect URI lấy từ hộp thoại credential của n8n
-   (`http://localhost:5678/rest/oauth2-credential/callback`). Trong n8n: *Credentials → Create →
-   YouTube OAuth2 API*, dán Client ID/Secret, bấm *Sign in with Google*.
-4. **Nút Duyệt trên điện thoại**: link trong nút phải mở được từ điện thoại.
-   - Cùng WiFi: `N8N_WEBHOOK_URL=http://<IP-LAN-của-máy>:5678/` và
-     `MEDIA_PUBLIC_URL=http://<IP-LAN-của-máy>:8000` (mở cổng 5678, 8000 trong Windows Firewall).
-   - Ở ngoài: dùng Cloudflare Tunnel / ngrok và đặt hai biến trên theo URL công khai.
-5. Áp dụng và import workflow (tự gắn credential Telegram/YouTube vừa tạo):
+Credentials **không nằm trong repo**; bạn tạo trong giao diện n8n.
+
+1. Mở http://localhost:5678, tạo tài khoản owner.
+2. **Telegram**
+   - Nhắn @BotFather `/newbot` để lấy bot token → n8n: *Credentials → Create → Telegram API*, dán token.
+   - Mở bot của bạn, bấm **Start** (bot không được nhắn trước cho người chưa chat với nó).
+   - Nhắn @userinfobot để lấy **ID của bạn** (chỉ gồm số) → `.env` → `TELEGRAM_CHAT_ID=`.
+3. **YouTube** (Google Cloud Console)
+   - Tạo project → bật **YouTube Data API v3**.
+   - *Google Auth Platform → Audience*: External, thêm email Google sở hữu kênh vào **Test users**.
+   - *Clients → Create client*: Web application, Authorized redirect URI
+     `http://localhost:5678/rest/oauth2-credential/callback`.
+   - n8n: *Credentials → Create → YouTube OAuth2 API*, dán Client ID/Secret, bấm
+     **Sign in with Google** (mở n8n bằng `localhost`, không phải IP LAN), gặp cảnh báo
+     "chưa xác minh" thì bấm Tiếp tục, chọn đúng kênh.
+4. **Link cho nút Duyệt**: Telegram không nhận link `localhost`, và điện thoại phải mở được link.
+   - Cùng WiFi: `N8N_WEBHOOK_URL=http://<IP-LAN>:5678/`, `MEDIA_PUBLIC_URL=http://<IP-LAN>:8000`
+     (xem IP bằng `ipconfig`; lần đầu Windows Firewall có thể hỏi mở cổng 5678/8000).
+   - Ở ngoài nhà: dùng Cloudflare Tunnel / ngrok, đặt hai biến trên theo URL công khai.
+   - Giữ `N8N_EDITOR_BASE_URL=http://localhost:5678/`: Google OAuth không chấp nhận IP LAN.
+5. Áp dụng và import workflow (tự gắn credential Telegram/YouTube vừa tạo, chỉ đọc id):
 
 ```bash
 docker compose up -d
 sh n8n/import_workflow.sh
 ```
 
-Sửa workflow: chỉnh `n8n/build_workflow.py` rồi chạy lại `sh n8n/import_workflow.sh`. Sửa trực
-tiếp trong giao diện n8n cũng được, nhưng sẽ bị ghi đè ở lần import sau.
+Các biến khác: `YOUTUBE_PRIVACY` (private | unlisted | public, mặc định private),
+`YOUTUBE_CATEGORY_ID` (22 People & Blogs, 27 Education, 28 Science & Technology),
+`PIPELINE_TIMEOUT_MIN` (mặc định 120).
 
-## Video (Remotion)
+---
 
-Hai composition trong `remotion/src/compositions/`: `PodcastLandscape` (1920×1080, 30fps)
-và `PodcastShort` (1080×1920, nhận `startSec`/`endSec`). Service gọi `npx remotion bundle` một
-lần rồi `npx remotion render` cho từng video:
+## 4. Viết kịch bản
 
-```bash
-curl -X POST "http://localhost:8000/episodes/<id>/render?format=all"   # landscape | short | all
+Một file Markdown UTF-8. Mọi thứ đều tùy chọn trừ lời đọc; **file chỉ có text thuần cũng chạy được**.
+
+```markdown
+---
+title: n8n là gì? Tự động hóa công việc trong 5 phút   # không có thì Claude tự đặt
+background: kenburns                                  # kenburns | loop | gradient
+music: chill_lofi.mp3                                 # file trong assets/music/, bỏ trống = ngẫu nhiên
+---
+
+## Mở đầu
+Xin chào các bạn, hôm nay mình sẽ nói về n8n.
+[pause 1s]
+
+## n8n là gì
+n8n là một công cụ tự động hóa quy trình theo kiểu kéo thả.
+[music up]
+
+[Lan]: Có cần biết lập trình không?
+[Minh]: Không bắt buộc, nhưng biết một chút JavaScript sẽ giúp bạn đi xa hơn.
+
+## Kết luận
+Cảm ơn các bạn đã nghe.
 ```
 
-**Nền** (frontmatter `background:` hoặc `brand.yaml` → `video.background`):
-- `kenburns`: ảnh trong `assets/backgrounds/` (jpg/png/webp), mỗi chapter một ảnh, zoom/pan chậm.
-- `loop`: video đầu tiên trong `assets/backgrounds/` (mp4/mov/webm), lặp vô hạn.
-- `gradient`: gradient chuyển màu theo `brand.yaml` → `colors.gradient`. Kiểu chọn mà chưa có asset thì tự rơi về gradient.
+| Cú pháp | Ý nghĩa |
+|---|---|
+| `---` … `---` đầu file | frontmatter YAML: `title`, `background`, `music` (đều tùy chọn) |
+| `## Tên chương` | mỗi heading là một chương (timestamp thật trong mô tả YouTube). Không có heading nào → Claude tự chia chương |
+| `# Tiêu đề` | dùng làm tiêu đề nếu frontmatter không có `title` |
+| `[pause 1s]`, `[pause 1.5s]`, `[pause 500ms]`, `[nghỉ 2 giây]` | im lặng thêm N giây (tối đa 30) |
+| `[music up]`, `[music up 5s]` | khoảng nghỉ cho nhạc nền lên (mặc định 3 giây) |
+| `[Tên]: câu thoại` | người nói khác; gán giọng trong `brand.yaml` → `tts.voices` (chưa gán thì dùng giọng của bạn) |
+| dòng trống | ngắt đoạn (nghỉ 600 ms thay vì 250 ms giữa câu) |
+| `<!-- ghi chú -->` | không được đọc |
 
-> Ảnh `placeholder_0*.jpg`, `placeholder_loop.mp4` và `assets/logo.png` được tạo bằng
-> `scripts/make_placeholders.py`. Hãy thay bằng ảnh/logo của bạn.
+**Mẹo**
 
-Font: `assets/fonts/BeVietnamPro-*.ttf` (SIL OFL, xem `assets/fonts/OFL.txt`).
+- Câu ngắn đọc tự nhiên hơn và phụ đề đẹp hơn; parser cảnh báo câu dài hơn 300 ký tự.
+- Từ viết tắt, tên tiếng Anh: thêm vào `config/pronunciation.yaml` (ví dụ `n8n: "en ây en"`).
+  Phụ đề vẫn hiện chữ gốc.
+- Giá trị frontmatter có dấu `:` thì đặt trong ngoặc kép: `title: "n8n: nhập môn"`.
+- Markdown như `**đậm**`, `*nghiêng*`, `[link](url)`, danh sách `-` được bỏ ký hiệu khi đọc.
 
-Sửa giao diện: `remotion/src` được mount vào container nên chỉ cần render lại, không phải build lại
-image. Xem trước bằng Remotion Studio (cần Node trên máy): `cd remotion && npm i && npm run studio`.
+**Lỗi kịch bản** được báo đủ một lượt, có dòng/cột và gợi ý, ví dụ:
+
+```
+Kịch bản có 2 lỗi:
+Dòng 6, cột 1: Tag [pasue 2s] không hợp lệ.
+    > [pasue 2s]
+    Gợi ý: Có phải ý bạn là [pause 2s]?
+Dòng 7: Heading '##' không có tên chương.
+    Gợi ý: Viết tên chương sau '## ', ví dụ: ## Mở đầu
+```
+
+Ví dụ đầy đủ: [`examples/script_demo.md`](examples/script_demo.md) (~62 giây, 3 chương).
+
+---
+
+## 5. Sử dụng hằng ngày
+
+1. Mở Voice Studio.
+2. Thả `tap-moi.md` vào `data/inbox/` (hoặc
+   `curl -F file=@tap-moi.md http://localhost:5678/webhook/podcast/upload`).
+3. Vài phút sau Telegram nhận bản nháp: tiêu đề, mô tả, chương, link xem video/Shorts/thumbnail.
+4. Bấm **Duyệt** → upload YouTube (private) kèm chương và phụ đề; script chuyển vào
+   `data/inbox/done/`. Bấm **Từ chối** → `data/inbox/rejected/`. Không bấm trong 48 giờ thì bỏ qua.
+5. Kịch bản lỗi → Telegram báo dòng sai. Sửa file trong `data/inbox/` và lưu lại là chạy lại.
+
+**Chạy không qua n8n** (API trực tiếp):
+
+```bash
+curl -F file=@tap-moi.md http://localhost:8000/episodes             # trả về episode id
+curl -X POST http://localhost:8000/episodes/<id>/pipeline/run       # trả về job_id
+curl http://localhost:8000/jobs/<job_id>                            # trạng thái, tiến độ, lỗi ở bước nào
+curl http://localhost:8000/episodes/<id>/files                      # danh sách file đầu ra
+```
+
+Chạy lại một bước: `POST /episodes/<id>/{tts|mix|align|subtitles|metadata|clips/select|thumbnail}`
+hoặc `POST /episodes/<id>/render?format=landscape|short|all`. Cùng nội dung kịch bản luôn ra cùng
+episode id.
+
+---
+
+## 6. Nhạc, nền, logo, font, brand
+
+> Asset đi kèm repo (`placeholder_ambient.mp3`, `placeholder_0*.jpg`, `placeholder_loop.mp4`,
+> `logo.png`) chỉ là **placeholder** tạo bằng `scripts/make_placeholders.py` (tone sine, gradient).
+> Hãy xóa và thay bằng asset **có license** của bạn. Không tự tải nhạc/ảnh trên mạng về dùng.
+
+| Asset | Đặt ở đâu | Ghi chú |
+|---|---|---|
+| Nhạc nền | `assets/music/*.mp3\|wav\|m4a\|ogg\|flac` | frontmatter `music:` hoặc ngẫu nhiên (cố định theo tập); bài ngắn hơn giọng sẽ loop; tự chuẩn hóa mức |
+| Intro/outro | `assets/music/`, khai báo ở `brand.yaml` → `audio.music.intro/outro` | nối bằng crossfade, timing phụ đề tự dời theo |
+| Ảnh nền (`kenburns`) | `assets/backgrounds/*.jpg\|png\|webp` | mỗi chương một ảnh, zoom/pan chậm |
+| Video nền (`loop`) | `assets/backgrounds/*.mp4\|mov\|webm` | lấy video đầu tiên, lặp vô hạn |
+| Logo | `assets/logo.png` (vuông, nền trong suốt) | góc trên video, thumbnail |
+| Font | `assets/fonts/` | mặc định Be Vietnam Pro (SIL OFL, xem `OFL.txt`); đổi trong `brand.yaml` → `fonts` |
+
+Chưa có asset cho kiểu nền đã chọn thì tự dùng `gradient`.
+
+**`config/brand.yaml`** (mỗi trường có comment): tên kênh, màu (highlight, nền, chữ, gradient),
+font, nền mặc định, khoảng nghỉ giữa câu/đoạn/chương, compressor, loudness (-16 LUFS, TP -1.5),
+mức nhạc (`level_db` dưới giọng, `duck_db` lên khi nghỉ), phụ đề, số lượng/độ dài Shorts.
+Đổi brand rồi chạy lại pipeline: chỉ những bước bị ảnh hưởng chạy lại.
+
+**Sửa giao diện video**: `remotion/src/` được mount vào container, sửa xong render lại là thấy, không
+cần build image. Xem trước bằng Remotion Studio (cần Node trên máy): `cd remotion && npm i && npm run studio`.
 
 > Remotion miễn phí cho cá nhân và công ty đến 3 người; tổ chức lớn hơn cần
 > [company license](https://www.remotion.dev/license).
 
-Kiểm tra ducking của một tập:
+**Sửa workflow n8n**: chỉnh `n8n/build_workflow.py` rồi `sh n8n/import_workflow.sh`. Sửa trong giao
+diện n8n cũng được nhưng sẽ bị ghi đè ở lần import sau.
+
+---
+
+## 7. Kiểm thử
 
 ```bash
-docker compose exec media-service-cpu python scripts/check_ducking.py /data/episodes/<id>   # hoặc media-service-gpu
+# unit test (parser, filter graph, alignment, phụ đề, schema LLM, ...)
+docker compose exec media-service-gpu sh -c "pip install -q pytest pytest-asyncio && python -m pytest -q"
+
+# E2E: script_demo.md -> mọi đầu ra, tự kiểm tra; --clear-tts-cache để gọi Voice Studio thật
+docker compose exec media-service-gpu python scripts/e2e.py --clear-tts-cache
 ```
 
-## Cấu trúc
+E2E kiểm tra: đủ file, kích thước/thời lượng video và Shorts, clip khớp ranh giới câu, loudness
+(`ebur128`), SRT ≤ 42 ký tự/2 dòng và **khớp từng chữ với kịch bản**, words.json, karaoke, tiêu đề,
+tags, chương `00:00`, thumbnail. Kết quả ở `data/episodes/<id>/e2e/report.json`, kèm
+`e2e/contact_sheet.png` (frame đầu mỗi chương, đoạn `[music up]`, Shorts, thumbnail) để soi dấu
+tiếng Việt, phụ đề, waveform, tên chương.
 
-| Thư mục | Nội dung |
-|---|---|
-| `config/brand.yaml` | màu, font, logo, loudness, mức nhạc, nền mặc định (có comment từng trường) |
-| `config/pronunciation.yaml` | từ điển phát âm áp dụng trước khi gửi TTS |
-| `assets/` | nhạc, nền, font, logo do bạn tự bỏ vào (có license) |
-| `media_service/` | FastAPI + ffmpeg + faster-whisper |
-| `remotion/` | composition video |
-| `n8n/workflows/` | workflow điều phối |
-| `data/inbox/` | thả `script.md` vào đây là chạy |
-| `data/episodes/{id}/` | mọi file trung gian và đầu ra của một tập |
+Công cụ chẩn đoán khác:
 
-## Phát triển (không cần Docker)
+```bash
+docker compose exec media-service-gpu python scripts/check_ducking.py /data/episodes/<id>   # mức nhạc khi nói / khi nghỉ
+```
+
+Phát triển không cần Docker (unit test chạy được trên Windows với Python 3.11+):
 
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r media_service/requirements-dev.txt
 cd media_service && ../.venv/Scripts/python -m pytest
-../.venv/Scripts/uvicorn app.main:app --reload
 ```
+
+---
+
+## 8. Xử lý sự cố
+
+| Triệu chứng | Nguyên nhân / cách sửa |
+|---|---|
+| `docker` báo *Docker Desktop is unable to start* / *wsl is not installed* | Cài WSL: Terminal (Admin) `wsl --install --no-distribution`, khởi động lại, mở lại Docker Desktop |
+| `/tts/health` 503, Telegram báo "Voice Studio không phản hồi" | Mở Voice Studio; kiểm tra `VOICE_STUDIO_URL`; chạy `scripts/probe_voice_studio.py` |
+| "Không tìm thấy giọng …" | Sai `VOICE_STUDIO_VOICE_ID`; xem `GET /v1/audio/voices` của Voice Studio |
+| Đổi `.env` mà không có tác dụng | Chạy `docker compose up -d` (tạo lại container), không chỉ `restart` |
+| Bước metadata: "Chưa có CLAUDE_CODE_OAUTH_TOKEN" | Làm mục 3.2; token sai/hết hạn thì chạy lại `claude setup-token` |
+| Telegram: *chat not found* | Chưa bấm **Start** với bot, hoặc `TELEGRAM_CHAT_ID` không phải ID của bạn |
+| Telegram: *bot can't send messages to the bot* | `TELEGRAM_CHAT_ID` đang là ID bot / bot token; dùng ID từ @userinfobot |
+| Telegram: *button URL … is invalid: Wrong HTTP URL* | `N8N_WEBHOOK_URL` đang là localhost; đổi sang IP LAN hoặc URL tunnel |
+| Bấm Duyệt trên điện thoại không mở được trang | Điện thoại khác mạng, hoặc Windows Firewall chặn cổng 5678 |
+| Google: *device_id and device_name are required for private IP* | OAuth đang dùng IP LAN; giữ `N8N_EDITOR_BASE_URL=http://localhost:5678/` và mở n8n bằng localhost |
+| Google: *403 access_denied* / chưa hoàn tất xác minh | Thêm email vào *Audience → Test users* |
+| Thả file vào inbox mà n8n không chạy | Workflow chưa publish: `sh n8n/import_workflow.sh`; file phải đuôi `.md` và nằm trực tiếp trong `data/inbox/` |
+| Align chậm | Chưa dùng GPU: `COMPOSE_PROFILES=gpu`, kiểm tra `docker run --rm --gpus all python:3.11-slim nvidia-smi`; xem `align_report.json` → `device` |
+| Chỉ có 1 Short | Tập ngắn: mỗi Short 30–60 giây và không chồng nhau, nên tập ~1 phút chỉ cắt được 1 clip; tập ≥ ~2 phút mới có 3–5 |
+| Phụ đề YouTube "lỗi 400" | Kiểm tra quyền credential YouTube (đăng nhập lại *Sign in with Google*) |
+| Render lỗi font / ô vuông thay chữ | Thiếu file font trong `assets/fonts/` theo `brand.yaml` → `fonts` |
+| Job báo "Media service khởi động lại trong khi job đang chạy" | Container bị restart giữa chừng; chạy lại `pipeline/run`, các bước đã xong sẽ được bỏ qua |
+
+Log: `docker compose logs -f media-service-gpu`, `docker compose logs -f n8n`; chi tiết mỗi job ở
+`GET /jobs/<id>` (trường `log`, `error.step`, `error.detail`).
+
+---
+
+## 9. Cấu trúc repo và API
+
+```
+podcast-studio/
+├── docker-compose.yml          # n8n + media-service (profile cpu | gpu)
+├── .env.example
+├── config/brand.yaml           # brand, audio, phụ đề, Shorts (có comment)
+├── config/pronunciation.yaml   # từ điển phát âm
+├── assets/{music,backgrounds,fonts}/, logo.png
+├── examples/script_demo.md
+├── media_service/
+│   ├── app/                    # main.py, jobs.py, pipeline.py, script/, tts/, audio/, align/,
+│   │                           # subtitles/, llm/, render/, thumbnail/, inbox.py, summary.py
+│   ├── scripts/                # probe_voice_studio.py, e2e.py, check_ducking.py, make_placeholders.py
+│   ├── tests/
+│   └── Dockerfile
+├── remotion/src/compositions/{PodcastLandscape,PodcastShort}.tsx
+├── n8n/build_workflow.py, n8n/import_workflow.sh, n8n/workflows/podcast_pipeline.json
+└── data/
+    ├── inbox/{done,rejected,failed}/
+    ├── episodes/<id>/          # mọi file trung gian và đầu ra
+    ├── cache/tts/              # giọng đã tạo, theo hash
+    └── jobs/                   # trạng thái job
+```
+
+| Endpoint | Mô tả |
+|---|---|
+| `POST /episodes` | upload `script.md` (multipart `file` hoặc form `script`), parse + validate |
+| `POST /inbox/episodes` | tạo episode từ file trong `data/inbox/` (n8n dùng) |
+| `POST /episodes/{id}/pipeline/run` | chạy toàn bộ, bỏ qua bước còn hợp lệ (`?force=true` để chạy lại hết) |
+| `POST /episodes/{id}/{tts,mix,align,subtitles,metadata,clips/select,thumbnail}` | chạy lại một bước |
+| `POST /episodes/{id}/render?format=landscape\|short\|all` | render video |
+| `GET /jobs/{id}` | trạng thái, tiến độ, log, lỗi ở bước nào (`step_label`) |
+| `GET /episodes/{id}/files`, `/files/{path}`, `/summary` | danh sách file, tải file, tóm tắt cho Telegram/YouTube |
+| `POST /inbox/archive` | chuyển script sang `done/`, `rejected/`, `failed/` |
+| `GET /health`, `GET /tts/health` | kiểm tra service và Voice Studio |

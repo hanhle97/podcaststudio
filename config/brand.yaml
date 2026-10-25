@@ -15,11 +15,11 @@ colors:
 fonts:
   family: "Be Vietnam Pro"        # must support Vietnamese diacritics
   regular: fonts/BeVietnamPro-Regular.ttf   # relative to assets/
-  bold: fonts/BeVietnamPro-Bold.ttf
+  bold: fonts/BeVietnamPro-Bold.ttf  # bold weight: titles, subtitles, thumbnail text
 
 video:
   background: gradient            # default background: kenburns | loop | gradient
-  fps: 30
+  fps: 30                         # frames per second of every rendered video
 
 script:
   long_sentence_warn_chars: 300   # parser warns when a sentence is longer than this
@@ -29,7 +29,7 @@ script:
 tts:
   provider: voice_studio          # voice_studio | elevenlabs (stub)
   model: omnivoice                # Voice Studio engine id
-  language: vi
+  language: vi                    # language hint sent to Voice Studio and faster-whisper
   speed: 1.0                      # 0.25..4.0
   seed: 42                        # fixed seed = same sentence always sounds the same (cache-friendly)
   concurrency: 2                  # parallel requests to the TTS API
@@ -41,44 +41,44 @@ tts:
 audio:
   sample_rate: 48000              # all speech is normalised to this rate, mono
   gaps_ms:                        # silence inserted between pieces of speech
-    sentence: 250
-    paragraph: 600
-    chapter: 1200
+    sentence: 250                 # between sentences of the same paragraph
+    paragraph: 600                # after a blank line / speaker change
+    chapter: 1200                 # between ## chapters (music rises here)
   lead_in_ms: 500                 # silence before the first word
   tail_ms: 1000                   # silence after the last word
   trim_silence_db: -50            # trim TTS clip edges quieter than this
   highpass_hz: 60                 # remove rumble below this frequency
   compressor:
     enabled: true                 # very gentle compression; set false to skip
-    threshold_db: -18
-    ratio: 2
-    attack_ms: 20
-    release_ms: 250
+    threshold_db: -18             # level where compression starts
+    ratio: 2                      # 2:1 = gentle
+    attack_ms: 20                 # how fast it reacts to loud syllables
+    release_ms: 250               # how fast it lets go
   loudness:                       # two-pass loudnorm target (podcast standard)
-    target_lufs: -16
-    true_peak_db: -1.5
-    lra: 11
+    target_lufs: -16              # integrated loudness of final_audio (Spotify/Apple: -16 to -14)
+    true_peak_db: -1.5            # maximum true peak, avoids clipping after MP3 encoding
+    lra: 11                       # loudness range target
   music:
     enabled: true                 # false = voice only
     level_db: -22                 # music level UNDER the voice, relative to it (-20..-25 recommended)
     duck_db: 10                   # how much the music rises in [music up] / chapter breaks
     duck_attack_ms: 20            # how fast the music dips when the voice starts
     duck_release_ms: 1200         # how slowly it comes back in pauses (short gaps barely move it)
-    fade_in_s: 3
-    fade_out_s: 5
+    fade_in_s: 3                  # music fade-in at the start
+    fade_out_s: 5                 # music fade-out at the end
     intro: null                   # optional file in assets/music/ played before the voice
     outro: null                   # optional file in assets/music/ played after the voice
     crossfade_s: 1.0              # crossfade between intro/outro and the episode
-  mp3_bitrate: 192k
+  mp3_bitrate: 192k               # bitrate of final_audio.mp3
 
 subtitles:
-  max_chars_per_line: 42
-  max_lines: 2
+  max_chars_per_line: 42          # SRT line length (YouTube friendly)
+  max_lines: 2                    # lines per subtitle cue
   karaoke_min_words: 2            # word groups for Shorts karaoke captions
-  karaoke_max_words: 4
+  karaoke_max_words: 4             # (2-4 words per caption)
 
 shorts:
-  min_clips: 3
-  max_clips: 5
-  min_seconds: 30
-  max_seconds: 60
+  min_clips: 3                    # Shorts per episode (short episodes get fewer: clips never overlap)
+  max_clips: 5                    # upper bound for the LLM
+  min_seconds: 30                 # shortest clip
+  max_seconds: 60                 # longest clip

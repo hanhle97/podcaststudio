@@ -18,6 +18,8 @@ x-media-service: &media-service
     - ./assets:/assets:ro
     # live-edit the video templates without rebuilding the image
     - ./remotion/src:/remotion/src:ro
+    - ./examples:/app/examples:ro
+    - ./media_service/scripts:/app/scripts:ro
     - whisper_models:/root/.cache/huggingface
   ports:
     - "${MEDIA_PORT:-8000}:8000"
