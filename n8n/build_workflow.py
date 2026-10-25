@@ -212,7 +212,9 @@ http("Lấy phụ đề SRT", (4180, -260), "GET",
      full=False, never_error=False, fmt="text")
 code("Soạn phụ đề", (4400, -260), r"""
 const boundary = 'podcast_studio_srt';
-const videoId = $('Upload YouTube').first().json.id;
+// the n8n YouTube node returns the new video's id as uploadId
+const yt = $('Upload YouTube').first().json;
+const videoId = yt.uploadId || yt.id;
 const meta = { snippet: { videoId, language: 'vi', name: 'Tiếng Việt', isDraft: false } };
 const srt = $input.first().json.data;
 const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
@@ -232,7 +234,8 @@ http("Chuyển script vào done", (4840, -260), "POST", f"{MEDIA}/inbox/archive"
 set_node("Tin đã đăng", (5060, -260), {"text": (
     "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n"
     "{{ $('Tóm tắt tập').item.json.title }}\n"
-    "https://youtu.be/{{ $('Upload YouTube').item.json.id }}\n"
+    "https://youtu.be/{{ $('Upload YouTube').item.json.uploadId || "
+    "$('Upload YouTube').item.json.id }}\n"
     "Phụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : "
     "'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n"
     "{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}")})

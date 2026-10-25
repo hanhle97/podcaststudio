@@ -664,7 +664,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const boundary = 'podcast_studio_srt';\nconst videoId = $('Upload YouTube').first().json.id;\nconst meta = { snippet: { videoId, language: 'vi', name: 'Tiếng Việt', isDraft: false } };\nconst srt = $input.first().json.data;\nconst body = `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n` +\n  `${JSON.stringify(meta)}\\r\\n--${boundary}\\r\\nContent-Type: application/x-subrip\\r\\n\\r\\n` +\n  `${srt}\\r\\n--${boundary}--`;\nreturn [{ json: { body, boundary, videoId } }];"
+        "jsCode": "const boundary = 'podcast_studio_srt';\n// the n8n YouTube node returns the new video's id as uploadId\nconst yt = $('Upload YouTube').first().json;\nconst videoId = yt.uploadId || yt.id;\nconst meta = { snippet: { videoId, language: 'vi', name: 'Tiếng Việt', isDraft: false } };\nconst srt = $input.first().json.data;\nconst body = `--${boundary}\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n` +\n  `${JSON.stringify(meta)}\\r\\n--${boundary}\\r\\nContent-Type: application/x-subrip\\r\\n\\r\\n` +\n  `${srt}\\r\\n--${boundary}--`;\nreturn [{ json: { body, boundary, videoId } }];"
       },
       "id": "38da9c2a-f5a6-59ca-9916-7a9e3dea852a",
       "name": "Soạn phụ đề",
@@ -737,7 +737,7 @@
             {
               "id": "e89401f5-3bde-5fb2-acea-d3a08e535ed3",
               "name": "text",
-              "value": "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n{{ $('Tóm tắt tập').item.json.title }}\nhttps://youtu.be/{{ $('Upload YouTube').item.json.id }}\nPhụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : 'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}",
+              "value": "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n{{ $('Tóm tắt tập').item.json.title }}\nhttps://youtu.be/{{ $('Upload YouTube').item.json.uploadId || $('Upload YouTube').item.json.id }}\nPhụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : 'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}",
               "type": "string"
             }
           ]

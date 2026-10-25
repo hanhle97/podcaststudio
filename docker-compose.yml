@@ -61,6 +61,8 @@ services:
       GENERIC_TIMEZONE: ${TZ:-Asia/Ho_Chi_Minh}
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      # UI + OAuth callbacks stay on localhost: Google rejects private-IP redirect URIs
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678/}
       N8N_SECURE_COOKIE: "false"
       N8N_RUNNERS_ENABLED: "true"
       # n8n 2.x disables the Local File Trigger by default; we need it for data/inbox
