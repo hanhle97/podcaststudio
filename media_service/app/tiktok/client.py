@@ -1,15 +1,16 @@
-"""TikTok Content Posting API (Direct Post, FILE_UPLOAD) with OAuth v2.
+"""TikTok Content Posting API with OAuth v2: inbox drafts (default) or Direct Post.
 
 Docs: developers.tiktok.com/doc/content-posting-api-get-started,
+      /doc/content-posting-api-reference-upload-video (inbox drafts),
       /doc/content-posting-api-media-transfer-guide, /doc/login-kit-web,
       /doc/oauth-user-access-token-management
-Unaudited apps can only post SELF_ONLY (private) videos.
+Unaudited apps may Direct Post only to private accounts, so the default mode sends
+drafts to the creator's TikTok inbox (scope video.upload); the creator posts in the app.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -20,7 +21,10 @@ import httpx
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 API = "https://open.tiktokapis.com"
-SCOPES = "user.info.basic,video.publish"
+SCOPES = {"inbox": "user.info.basic,video.upload", "direct": "user.info.basic,video.publish"}
+DONE_STATUSES = {"inbox": {"SEND_TO_USER_INBOX", "PUBLISH_COMPLETE"},
+                 "direct": {"PUBLISH_COMPLETE"}}
+POLL_SECONDS = 10  # status/init endpoints are rate limited per token
 
 MIN_CHUNK = 5 * 1024 * 1024
 DEFAULT_CHUNK = 10 * 1024 * 1024
@@ -91,12 +95,15 @@ class TokenStore:
 
 class TikTokClient:
     def __init__(self, client_key: str, client_secret: str, redirect_uri: str, store: TokenStore,
-                 transport: httpx.BaseTransport | None = None,
+                 mode: str = "inbox", transport: httpx.BaseTransport | None = None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep):
+        if mode not in SCOPES:
+            raise TikTokError(f"TIKTOK_MODE phải là inbox hoặc direct, không phải {mode!r}.")
         self.client_key = client_key
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.store = store
+        self.mode = mode
         self.clock = clock
         self.sleep = sleep
         self._http = httpx.Client(timeout=httpx.Timeout(120, connect=15), transport=transport)
@@ -110,9 +117,17 @@ class TikTokClient:
         if not self.configured():
             raise TikTokError("Chưa cấu hình TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET / "
                               "TIKTOK_REDIRECT_URI trong .env.")
-        query = {"client_key": self.client_key, "response_type": "code", "scope": SCOPES,
-                 "redirect_uri": self.redirect_uri, "state": state}
+        query = {"client_key": self.client_key, "response_type": "code",
+                 "scope": SCOPES[self.mode], "redirect_uri": self.redirect_uri, "state": state}
         return f"{AUTH_URL}?{urllib.parse.urlencode(query)}"
+
+    def missing_scope(self) -> str | None:
+        """The scope this mode needs but the stored token lacks (re-authorize)."""
+        token = self.store.load()
+        need = SCOPES[self.mode].split(",")[1]
+        if token and token.scope and need not in token.scope.split(","):
+            return need
+        return None
 
     def exchange_code(self, code: str) -> Token:
         token = self._token_request({"code": urllib.parse.unquote(code),
@@ -132,6 +147,7 @@ class TikTokClient:
         fresh = self._token_request({"grant_type": "refresh_token",
                                      "refresh_token": token.refresh_token})
         fresh.open_id = fresh.open_id or token.open_id
+        fresh.scope = fresh.scope or token.scope
         self.store.save(fresh)
         return fresh
 
@@ -146,11 +162,15 @@ class TikTokClient:
 
     # --- API -----------------------------------------------------------------------------
 
-    def _api(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _api(self, path: str, body: dict[str, Any] | None = None,
+             method: str = "POST") -> dict[str, Any]:
         token = self.access_token()
-        r = self._http.post(f"{API}{path}", json=body,
-                            headers={"Authorization": f"Bearer {token.access_token}",
-                                     "Content-Type": "application/json; charset=UTF-8"})
+        headers = {"Authorization": f"Bearer {token.access_token}",
+                   "Content-Type": "application/json; charset=UTF-8"}
+        if method == "GET":
+            r = self._http.get(f"{API}{path}", headers=headers)
+        else:
+            r = self._http.post(f"{API}{path}", json=body or {}, headers=headers)
         data = _json(r)
         err = data.get("error") or {}
         if r.status_code != 200 or err.get("code", "ok") != "ok":
@@ -159,21 +179,37 @@ class TikTokClient:
         return data.get("data") or {}
 
     def creator_info(self) -> dict[str, Any]:
+        """Direct Post only: allowed privacy levels, max duration, username."""
         return self._api("/v2/post/publish/creator_info/query/", {})
+
+    def user_info(self) -> dict[str, Any]:
+        """Display name of the connected account (scope user.info.basic)."""
+        data = self._api("/v2/user/info/?fields=open_id,display_name", method="GET")
+        return data.get("user") or {}
+
+    def upload_to_inbox(self, path: Path, on_progress: Callable[[str], None] | None = None,
+                        timeout_s: float = 600) -> dict[str, Any]:
+        """Send one video to the creator's TikTok inbox as a draft."""
+        return self._upload("/v2/post/publish/inbox/video/init/", {}, path,
+                            DONE_STATUSES["inbox"], on_progress, timeout_s)
 
     def publish_video(self, path: Path, title: str, privacy_level: str,
                       on_progress: Callable[[str], None] | None = None,
                       timeout_s: float = 600) -> dict[str, Any]:
         """Direct-post one video; returns {publish_id, status, post_id?}."""
+        post_info = {"title": title[:2200], "privacy_level": privacy_level,
+                     "disable_duet": False, "disable_comment": False,
+                     "disable_stitch": False, "video_cover_timestamp_ms": 1500}
+        return self._upload("/v2/post/publish/video/init/", {"post_info": post_info}, path,
+                            DONE_STATUSES["direct"], on_progress, timeout_s)
+
+    def _upload(self, init_path: str, extra: dict[str, Any], path: Path, done: set[str],
+                on_progress: Callable[[str], None] | None, timeout_s: float) -> dict[str, Any]:
         size = path.stat().st_size
         chunk, count = chunk_plan(size)
-        init = self._api("/v2/post/publish/video/init/", {
-            "post_info": {"title": title[:2200], "privacy_level": privacy_level,
-                          "disable_duet": False, "disable_comment": False,
-                          "disable_stitch": False, "video_cover_timestamp_ms": 1500},
-            "source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk,
-                            "total_chunk_count": count},
-        })
+        init = self._api(init_path, {**extra, "source_info": {
+            "source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk,
+            "total_chunk_count": count}})
         upload_url, publish_id = init["upload_url"], init["publish_id"]
         with path.open("rb") as f:
             for i, (first, last) in enumerate(chunk_ranges(size, chunk, count), 1):
@@ -187,15 +223,15 @@ class TikTokClient:
                                       f"{r.text[:200]}")
                 if on_progress:
                     on_progress(f"Đã upload {i}/{count} phần")
-        return self.wait_published(publish_id, timeout_s, on_progress)
+        return self.wait_status(publish_id, done, timeout_s, on_progress)
 
-    def wait_published(self, publish_id: str, timeout_s: float,
-                       on_progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+    def wait_status(self, publish_id: str, done: set[str], timeout_s: float,
+                    on_progress: Callable[[str], None] | None = None) -> dict[str, Any]:
         deadline = self.clock() + timeout_s
         while True:
             data = self._api("/v2/post/publish/status/fetch/", {"publish_id": publish_id})
             status = data.get("status", "")
-            if status == "PUBLISH_COMPLETE":
+            if status in done:
                 ids = data.get("publicaly_available_post_id") or data.get(
                     "publicly_available_post_id") or []
                 return {"publish_id": publish_id, "status": status,
@@ -207,7 +243,7 @@ class TikTokClient:
                                   f"(trạng thái {status}).")
             if on_progress:
                 on_progress(f"TikTok đang xử lý ({status})")
-            self.sleep(5)
+            self.sleep(POLL_SECONDS)
 
 
 def _json(r: httpx.Response) -> dict[str, Any]:

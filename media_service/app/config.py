@@ -47,7 +47,10 @@ class Settings(BaseSettings):
     tiktok_client_key: str = ""
     tiktok_client_secret: str = ""
     tiktok_redirect_uri: str = ""
-    tiktok_privacy: str = "SELF_ONLY"  # unaudited apps may only post SELF_ONLY
+    # inbox = drafts in the creator's TikTok inbox (works for unaudited apps on public
+    # accounts); direct = post directly (needs an audited app or a private account)
+    tiktok_mode: Literal["inbox", "direct"] = "inbox"
+    tiktok_privacy: str = "SELF_ONLY"  # direct mode only
     tiktok_max_clips: int = 3
     log_level: str = "INFO"
 

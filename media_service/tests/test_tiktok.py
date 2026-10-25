@@ -44,7 +44,9 @@ def test_hashtags_and_caption():
 class FakeTikTok:
     """Minimal in-memory TikTok API for MockTransport."""
 
-    def __init__(self, statuses=("PROCESSING_UPLOAD", "PUBLISH_COMPLETE"), privacy=None):
+    def __init__(self, statuses=("PROCESSING_UPLOAD", "PUBLISH_COMPLETE"), privacy=None,
+                 scope="user.info.basic,video.publish"):
+        self.scope = scope
         self.calls: list[tuple[str, str]] = []
         self.puts: list[str] = []
         self.statuses = list(statuses)
@@ -60,12 +62,15 @@ class FakeTikTok:
             return httpx.Response(200, json={
                 "access_token": f"at-{form['grant_type']}", "refresh_token": "rt",
                 "open_id": "oid", "expires_in": 86400, "refresh_expires_in": 31536000,
-                "scope": "user.info.basic,video.publish"})
+                "scope": self.scope})
         if path == "/v2/post/publish/creator_info/query/":
             return httpx.Response(200, json={"data": {
                 "creator_username": "hanhle", "privacy_level_options": self.privacy,
                 "max_video_post_duration_sec": 600}, "error": {"code": "ok"}})
-        if path == "/v2/post/publish/video/init/":
+        if path == "/v2/user/info/":
+            return httpx.Response(200, json={"data": {"user": {"display_name": "Hanh Le"}},
+                                             "error": {"code": "ok"}})
+        if path in ("/v2/post/publish/video/init/", "/v2/post/publish/inbox/video/init/"):
             self.init_body = json.loads(req.content)
             return httpx.Response(200, json={"data": {"publish_id": "p1",
                                                       "upload_url": "https://up.test/u"},
@@ -79,15 +84,21 @@ class FakeTikTok:
         return httpx.Response(404)
 
 
-def make_client(tmp_path, fake, now=1000.0):
+def make_client(tmp_path, fake, now=1000.0, mode="direct"):
     clock = {"t": now}
     client = TikTokClient("ck", "cs", "https://x.trycloudflare.com/tiktok/auth/callback",
-                          TokenStore(tmp_path / "tok.json"), transport=httpx.MockTransport(fake),
+                          TokenStore(tmp_path / "tok.json"), mode=mode,
+                          transport=httpx.MockTransport(fake),
                           clock=lambda: clock["t"], sleep=lambda s: None)
     return client, clock
 
 
 def test_authorize_url_and_unconfigured(tmp_path):
+    inbox, _ = make_client(tmp_path, FakeTikTok(), mode="inbox")
+    q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(inbox.authorize_url("s")).query))
+    assert q["scope"] == "user.info.basic,video.upload"
+    with pytest.raises(TikTokError, match="TIKTOK_MODE"):
+        make_client(tmp_path, FakeTikTok(), mode="auto")
     client, _ = make_client(tmp_path, FakeTikTok())
     q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(client.authorize_url("st")).query))
     assert q == {"client_key": "ck", "response_type": "code",
@@ -157,7 +168,7 @@ def test_publish_episode_limits_and_is_idempotent(tmp_path):
     root = episode_dir(tmp_path, clips=4)
     out = publish_episode(root, client, "SELF_ONLY", 3, lambda p, m: None)
     assert [p["title"] for p in out["posts"]] == ["Clip 1", "Clip 2", "Clip 3"]
-    assert out["creator"] == "hanhle"
+    assert out["account"] == "hanhle" and out["mode"] == "direct"
     assert set(json.loads((root / "publish" / "tiktok.json").read_text())) == {
         "clip_01_9x16.mp4", "clip_02_9x16.mp4", "clip_03_9x16.mp4"}
     inits = sum(1 for c in fake.calls if c[1] == "/v2/post/publish/video/init/")
@@ -183,3 +194,30 @@ def test_auth_endpoints():
         assert denied.status_code == 400
         status = c.get("/tiktok/status").json()
         assert status["configured"] is False and status["connected"] is False
+
+
+def test_inbox_upload_and_publish_episode(tmp_path):
+    fake = FakeTikTok(statuses=["PROCESSING_UPLOAD", "SEND_TO_USER_INBOX"] * 3,
+                      scope="user.info.basic,video.upload")
+    client, _ = make_client(tmp_path, fake, mode="inbox")
+    client.exchange_code("c")
+    root = episode_dir(tmp_path)
+    out = publish_episode(root, client, "SELF_ONLY", 3, lambda p, m: None)
+    assert out["mode"] == "inbox" and out["account"] == "Hanh Le"
+    assert [p["status"] for p in out["posts"]] == ["SEND_TO_USER_INBOX"] * 3
+    assert "post_info" not in fake.init_body  # drafts carry no caption
+    assert ("POST", "/v2/post/publish/inbox/video/init/") in fake.calls
+    assert ("POST", "/v2/post/publish/creator_info/query/") not in fake.calls
+    text = out["summary_text"]
+    assert "hộp nháp" in text and "Clip 1\nHook 1" in text and "#Codex" in text
+    again = publish_episode(root, client, "SELF_ONLY", 3, lambda p, m: None)
+    assert all(p.get("skipped") for p in again["posts"])
+
+
+def test_missing_scope_requires_reconnect(tmp_path):
+    fake = FakeTikTok(scope="user.info.basic,video.publish")  # token from direct mode
+    client, _ = make_client(tmp_path, fake, mode="inbox")
+    client.exchange_code("c")
+    assert client.missing_scope() == "video.upload"
+    with pytest.raises(StepError, match="video.upload"):
+        publish_episode(episode_dir(tmp_path), client, "SELF_ONLY", 3, lambda p, m: None)

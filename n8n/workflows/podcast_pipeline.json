@@ -1085,7 +1085,7 @@
             {
               "id": "a54786d4-a566-5777-86b0-ece34316796f",
               "name": "tiktok_text",
-              "value": "={{ '🎵 TikTok: đã đăng ' + $json.result.posts.length + ' video (' + $json.result.privacy + ')' + ($json.result.creator ? ' @' + $json.result.creator : '') }}",
+              "value": "={{ $json.result.summary_text || ('🎵 TikTok: ' + $json.result.posts.length + ' video') }}",
               "type": "string"
             }
           ]

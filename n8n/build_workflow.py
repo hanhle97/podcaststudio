@@ -293,8 +293,7 @@ if_node("TikTok quá lâu?", (7700, -200), cond(
     "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
     "gt", 30, "number"))
 set_node("TikTok xong", (7700, -500), {"tiktok_text": (
-    "={{ '🎵 TikTok: đã đăng ' + $json.result.posts.length + ' video (' + "
-    "$json.result.privacy + ')' + ($json.result.creator ? ' @' + $json.result.creator : '') }}")})
+    "={{ $json.result.summary_text || ('🎵 TikTok: ' + $json.result.posts.length + ' video') }}")})
 set_node("TikTok lỗi", (7700, -360), {
     "tiktok_text": "={{ '⚠️ TikTok lỗi: ' + ($json.error?.message || 'không rõ') }}"})
 set_node("TikTok quá lâu", (7920, -200), {"tiktok_text": "⚠️ TikTok: quá 30 phút chưa xong"})

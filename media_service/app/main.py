@@ -168,12 +168,21 @@ async def tiktok_status() -> dict:
     client = tiktok_publish.client_from_settings(settings)
     token = client.store.load()
     info: dict = {"configured": client.configured(), "connected": token is not None,
-                  "privacy": settings.tiktok_privacy, "max_clips": settings.tiktok_max_clips}
+                  "mode": client.mode, "max_clips": settings.tiktok_max_clips}
+    missing = client.missing_scope()
+    if missing:
+        return {**info, "connected": False,
+                "error": f"token thiếu quyền {missing}, cần kết nối lại"}
     if token:
         try:
-            creator = await asyncio.to_thread(client.creator_info)
-            info.update(creator=creator.get("creator_username"),
-                        privacy_options=creator.get("privacy_level_options"))
+            if client.mode == "direct":
+                creator = await asyncio.to_thread(client.creator_info)
+                info.update(account=creator.get("creator_username"),
+                            privacy=settings.tiktok_privacy,
+                            privacy_options=creator.get("privacy_level_options"))
+            else:
+                user = await asyncio.to_thread(client.user_info)
+                info.update(account=user.get("display_name"))
         except TikTokError as e:
             info.update(connected=False, error=str(e))
     return info
