@@ -1,0 +1,9 @@
+.git
+.venv
+data
+assets
+models
+**/node_modules
+**/__pycache__
+**/.pytest_tmp
+remotion/out

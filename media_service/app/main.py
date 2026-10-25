@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -150,12 +150,12 @@ async def get_file(request: Request, episode_id: str, path: str) -> FileResponse
 
 
 def _submit(request: Request, episode_id: str, step_names: list[str] | None,
-            force: bool, kind: str) -> dict:
+            force: bool, kind: str, options: dict | None = None) -> dict:
     st = store(request)
     st.get(episode_id)  # 404 early
     steps = PIPELINE if step_names is None else [STEPS[n] for n in step_names]
     env = StepEnv(settings=settings, brand=request.app.state.brand, store=st,
-                  episode_id=episode_id)
+                  episode_id=episode_id, options=options or {})
     job = jobs(request).submit(kind, lambda ctx: run_steps(env, ctx, steps, force),
                                episode_id=episode_id)
     return {"job_id": job.id, "status_url": f"/jobs/{job.id}"}
@@ -179,6 +179,13 @@ async def step_align(request: Request, episode_id: str) -> dict:
 @app.post("/episodes/{episode_id}/subtitles", status_code=202)
 async def step_subtitles(request: Request, episode_id: str) -> dict:
     return _submit(request, episode_id, ["subtitles"], True, "subtitles")
+
+
+@app.post("/episodes/{episode_id}/render", status_code=202)
+async def step_render(request: Request, episode_id: str,
+                      format: Literal["landscape", "short", "all"] = "all") -> dict:
+    return _submit(request, episode_id, ["render"], True, f"render:{format}",
+                   {"format": format})
 
 
 @app.post("/episodes/{episode_id}/pipeline/run", status_code=202)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import cached_property
 from pathlib import Path
@@ -27,6 +27,7 @@ class StepEnv:
     brand: BrandConfig
     store: EpisodeStore
     episode_id: str
+    options: dict[str, Any] = field(default_factory=dict)  # per-call options (e.g. format)
 
     @cached_property
     def paths(self) -> EpisodePaths:
@@ -209,6 +210,41 @@ SUBTITLES = Step(
     run=_subtitles_run,
 )
 
-# Order of the full pipeline; later phases append metadata, render, ...
-PIPELINE: list[Step] = [PARSE, TTS, MIX, ALIGN, SUBTITLES]
+def _render_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.render.remotion import run_render
+
+    return run_render(env, progress)
+
+
+def _render_inputs(env: StepEnv) -> list[Path | str]:
+    root, s = env.paths.root, env.settings
+    src = sorted((s.remotion_dir / "src").rglob("*.ts*"))
+    assets = sorted(p for p in (s.assets_dir / "backgrounds").glob("*") if p.is_file())
+    fonts = [s.assets_dir / env.brand.fonts.regular, s.assets_dir / env.brand.fonts.bold]
+    logo = [s.assets_dir / env.brand.channel.logo] if env.brand.channel.logo else []
+    return [
+        env.options.get("format", "all"), root / "final_audio.wav", root / "segments.json",
+        root / "words.json", root / "karaoke.json", root / "clips.json", root / "metadata.json",
+        env.paths.script_json, env.brand.model_dump_json(), *src, *assets, *fonts, *logo,
+    ]
+
+
+def _render_outputs(env: StepEnv) -> list[Path]:
+    fmt = env.options.get("format", "all")
+    out = [env.paths.root / "render" / "clips_rendered.json"]
+    if fmt in ("landscape", "all"):
+        out.append(env.paths.root / "episode_16x9.mp4")
+    return out
+
+
+RENDER = Step(
+    name="render",
+    label="Render video (Remotion)",
+    outputs=_render_outputs,
+    inputs=_render_inputs,
+    run=_render_run,
+)
+
+# Order of the full pipeline; later phases append metadata, thumbnail, ...
+PIPELINE: list[Step] = [PARSE, TTS, MIX, ALIGN, SUBTITLES, RENDER]
 STEPS: dict[str, Step] = {s.name: s for s in PIPELINE}

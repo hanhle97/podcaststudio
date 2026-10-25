@@ -72,6 +72,32 @@ Mức khớp ghi trong `align_report.json`.
 tự/dòng, ≤ 2 dòng, ngắt theo câu và dấu phẩy, không vắt chapter), `subtitles.ass` + `karaoke.json`
 (cụm 2–4 từ, tô sáng từng từ, cho Shorts).
 
+## Video (Remotion)
+
+Hai composition trong `remotion/src/compositions/`: `PodcastLandscape` (1920×1080, 30fps)
+và `PodcastShort` (1080×1920, nhận `startSec`/`endSec`). Service gọi `npx remotion bundle` một
+lần rồi `npx remotion render` cho từng video:
+
+```bash
+curl -X POST "http://localhost:8000/episodes/<id>/render?format=all"   # landscape | short | all
+```
+
+**Nền** (frontmatter `background:` hoặc `brand.yaml` → `video.background`):
+- `kenburns`: ảnh trong `assets/backgrounds/` (jpg/png/webp), mỗi chapter một ảnh, zoom/pan chậm.
+- `loop`: video đầu tiên trong `assets/backgrounds/` (mp4/mov/webm), lặp vô hạn.
+- `gradient`: gradient chuyển màu theo `brand.yaml` → `colors.gradient`. Kiểu chọn mà chưa có asset thì tự rơi về gradient.
+
+> Ảnh `placeholder_0*.jpg`, `placeholder_loop.mp4` và `assets/logo.png` được tạo bằng
+> `scripts/make_placeholders.py`. Hãy thay bằng ảnh/logo của bạn.
+
+Font: `assets/fonts/BeVietnamPro-*.ttf` (SIL OFL, xem `assets/fonts/OFL.txt`).
+
+Sửa giao diện: `remotion/src` được mount vào container nên chỉ cần render lại, không phải build lại
+image. Xem trước bằng Remotion Studio (cần Node trên máy): `cd remotion && npm i && npm run studio`.
+
+> Remotion miễn phí cho cá nhân và công ty đến 3 người; tổ chức lớn hơn cần
+> [company license](https://www.remotion.dev/license).
+
 Kiểm tra ducking của một tập:
 
 ```bash
