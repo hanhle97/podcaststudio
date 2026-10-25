@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 OUT = Path(__file__).parent / "workflows" / "podcast_pipeline.json"
+LOCAL_OUT = Path(__file__).parent / "workflows" / "podcast_pipeline.local.json"  # gitignored
 WORKFLOW_ID = "PodcastPipeline1"
 MEDIA = "={{ $env.MEDIA_SERVICE_URL }}"
 EP = "$('Episode').item.json.episode_id"
@@ -359,10 +360,12 @@ def attach_credentials(found: list[dict]) -> list[str]:
 if __name__ == "__main__":
     import sys
 
+    out = OUT
     if len(sys.argv) > 2 and sys.argv[1] == "--credentials":
         for line in attach_credentials(json.loads(sys.argv[2])):
             print(f"  credential: {line}")
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(workflow, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        out = LOCAL_OUT  # credential ids stay out of the committed file
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(workflow, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
                    newline="\n")
-    print(f"✓ {OUT} ({len(nodes)} nodes)")
+    print(f"✓ {out} ({len(nodes)} nodes)")

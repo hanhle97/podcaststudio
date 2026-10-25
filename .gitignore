@@ -24,3 +24,4 @@ data/inbox/done/*
 # Model caches
 models/
 .pytest_tmp/
+n8n/workflows/*.local.json
