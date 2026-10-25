@@ -57,9 +57,10 @@ def shorts_to_publish(root: Path, max_clips: int) -> list[dict[str, Any]]:
 def summary_text(mode: str, account: str | None, posts: list[dict[str, Any]],
                  privacy: str) -> str:
     """Telegram-ready summary; in inbox mode includes the caption to paste for each clip."""
-    who = f" @{account}" if account else ""
-    if mode == "direct":
+    if mode == "direct":  # creator_username
+        who = f" @{account}" if account else ""
         return f"🎵 TikTok{who}: đã đăng {len(posts)} video ({privacy})"
+    who = f" ({account})" if account else ""  # display name, not a handle
     lines = [f"🎵 TikTok{who}: đã gửi {len(posts)} video vào hộp nháp.",
              "Mở app TikTok → Hộp thư → thông báo bản nháp → dán caption → Đăng."]
     for n, p in enumerate(posts, 1):

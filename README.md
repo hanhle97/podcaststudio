@@ -169,10 +169,17 @@ Hạn mức YouTube API mặc định là 10.000 đơn vị/ngày, mỗi lần u
 
 **TikTok** (tùy chọn, Content Posting API chính thức). Chưa cấu hình thì bước này được bỏ qua.
 
+Mặc định (`TIKTOK_MODE=inbox`) mỗi Short được gửi vào **hộp nháp TikTok** của bạn: mở app TikTok →
+Hộp thư → thông báo bản nháp → dán caption (tin Telegram có sẵn caption gợi ý cho từng clip: tiêu đề,
+hook, hashtag) → chọn nhạc, chế độ hiển thị → Đăng. Chế độ này dùng được với tài khoản công khai mà
+không cần TikTok duyệt app. `TIKTOK_MODE=direct` đăng thẳng, nhưng app chưa qua audit chỉ đăng được lên
+**tài khoản đang để Private** (lỗi `unaudited_client_can_only_post_to_private_accounts`). TikTok giới
+hạn tối đa 5 bản nháp chờ đăng trong 24 giờ.
+
 1. Vào [developers.tiktok.com](https://developers.tiktok.com) → *Manage apps* → tạo app. TikTok
    yêu cầu icon, mô tả, link *Terms of Service* và *Privacy Policy* (một trang web của bạn).
-2. Thêm sản phẩm **Login Kit** và **Content Posting API** (bật *Direct Post*), scope
-   `user.info.basic` và `video.publish`.
+2. Thêm sản phẩm **Login Kit** và **Content Posting API**, scope `user.info.basic` và
+   `video.upload` (chế độ `direct` cần bật *Direct Post* và scope `video.publish`).
 3. Tạo **Sandbox**, thêm tài khoản TikTok của bạn làm *target user* (chấp nhận lời mời trong app TikTok).
 4. Điền `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` vào `.env`.
 5. Kết nối tài khoản (redirect URI của TikTok bắt buộc HTTPS, nên mở tunnel tạm thời):
@@ -186,7 +193,10 @@ Hạn mức YouTube API mặc định là 10.000 đơn vị/ngày, mỗi lần u
    chuỗi đó vào `TIKTOK_REDIRECT_URI`, chạy `docker compose up -d`, rồi mở
    `https://<tên>.trycloudflare.com/tiktok/auth/start` và đăng nhập TikTok. Thấy "Đã kết nối TikTok"
    thì **tắt tunnel ngay** (Ctrl+C): trong lúc tunnel bật, media-service mở ra Internet không mật khẩu.
-6. Kiểm tra: `curl http://localhost:8000/tiktok/status` → `"connected": true`.
+   Lỗi hay gặp: `non_sandbox_target` (tài khoản chưa có trong Target users), `redirect_uri` (URI chưa
+   lưu đúng từng ký tự), `scope` (app chưa có scope mà chế độ đang dùng cần).
+6. Kiểm tra: `curl http://localhost:8000/tiktok/status` → `"connected": true`. Đổi `TIKTOK_MODE`
+   thì phải kết nối lại (bước 5) vì token cần scope khác.
 
 Token được lưu ở `data/secrets/tiktok_token.json` và tự làm mới (refresh token sống 365 ngày); chỉ
 cần làm lại bước 5 khi hết hạn hoặc bị thu hồi. App **chưa qua audit** của TikTok chỉ đăng được video
