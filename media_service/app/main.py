@@ -8,13 +8,15 @@ import logging
 import secrets
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import inbox
+from app import dashboard, inbox
 from app.config import get_settings, load_brand
 from app.episodes import EpisodeNotFound, EpisodeStore
 from app.jobs import EpisodeBusyError, Job, JobManager
@@ -39,6 +41,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Auto Podcast Studio – media service", lifespan=lifespan)
+# web UI API first: /episodes/overview must win over /episodes/{episode_id}
+app.include_router(dashboard.router)
+app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    return RedirectResponse("/ui/")
 
 
 def store(request: Request) -> EpisodeStore:

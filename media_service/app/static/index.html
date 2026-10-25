@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Podcast Studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F5B700'/><text x='16' y='22' font-size='14' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='%230F172A'>PS</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/"><span class="logo">PS</span> Podcast Studio</a>
+    <div id="health" class="health" aria-live="polite"></div>
+    <button id="new-btn" class="btn primary">+ Tập mới</button>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h2>Các tập</h2>
+        <button id="refresh-btn" class="btn ghost small" title="Làm mới">↻</button>
+      </div>
+      <ul id="episode-list" class="episode-list"></ul>
+    </aside>
+
+    <section id="view" class="view"></section>
+  </main>
+
+  <template id="tpl-new">
+    <div class="panel">
+      <div class="panel-head">
+        <h1>Tập mới</h1>
+        <p class="muted">Thả file <code>.md</code> vào đây hoặc soạn trực tiếp. Bấm <b>Kiểm tra</b> trước, rồi <b>Gửi đi</b>:
+          kịch bản vào hàng chờ, hệ thống tự làm giọng, video và gửi bản nháp để bạn duyệt.</p>
+      </div>
+      <div class="editor-wrap">
+        <div id="drop" class="drop">
+          <div class="drop-hint">Kéo thả file kịch bản (.md) vào đây</div>
+          <textarea id="script" spellcheck="false" placeholder="---&#10;title: Tiêu đề tập (tùy chọn)&#10;---&#10;&#10;## Mở đầu&#10;Xin chào các bạn, hôm nay mình sẽ nói về...&#10;[pause 1s]&#10;&#10;## Phần chính&#10;...&#10;[music up]&#10;&#10;## Kết luận&#10;Cảm ơn các bạn đã nghe."></textarea>
+        </div>
+        <aside class="cheatsheet">
+          <h3>Cú pháp</h3>
+          <dl>
+            <dt><code>## Tên chương</code></dt><dd>mỗi heading là một chương</dd>
+            <dt><code>[pause 1s]</code></dt><dd>nghỉ N giây (<code>500ms</code>, <code>1.5s</code>)</dd>
+            <dt><code>[music up]</code></dt><dd>nhạc nền lên ~3 giây (<code>[music up 5s]</code>)</dd>
+            <dt><code>[Lan]: câu thoại</code></dt><dd>người nói khác</dd>
+            <dt>dòng trống</dt><dd>ngắt đoạn (nghỉ lâu hơn)</dd>
+            <dt><code>---</code> ở đầu</dt><dd>frontmatter: <code>title</code>, <code>background</code>, <code>music</code></dd>
+          </dl>
+          <p class="muted small">Ghi chú, link, chỉ dẫn sản xuất sẽ bị đọc thành tiếng, hãy bỏ khỏi kịch bản.</p>
+        </aside>
+      </div>
+      <div class="row">
+        <input id="filename" class="input" placeholder="Tên file (vd: tap-12-n8n.md)">
+        <button id="check-btn" class="btn">Kiểm tra</button>
+        <button id="send-btn" class="btn primary" disabled>Gửi đi</button>
+      </div>
+      <div id="check-result"></div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 1
     # base URL used in links sent to Telegram (must be reachable from your phone)
     media_public_url: str = "http://localhost:8000"
+    # n8n as seen from this container (health check, approving drafts from the web UI)
+    n8n_internal_url: str = "http://n8n:5678"
 
     # TikTok Content Posting API (Direct Post). Redirect URI must be https (tunnel).
     tiktok_client_key: str = ""

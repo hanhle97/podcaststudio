@@ -271,6 +271,23 @@ Ví dụ đầy đủ: [`examples/script_demo.md`](examples/script_demo.md) (~62
 
 ## 5. Sử dụng hằng ngày
 
+### Giao diện web: http://localhost:8000
+
+Cách dễ nhất. Trang web do media-service phục vụ (không cần cài thêm gì):
+
+- **Thanh trạng thái**: Voice Studio, Claude, n8n, TikTok (xanh = sẵn sàng; di chuột vào để xem lý do).
+- **+ Tập mới**: kéo thả file `.md` hoặc soạn trực tiếp → **Kiểm tra** (lỗi hiện theo dòng, bấm vào
+  để nhảy tới dòng đó) → **Gửi đi** (kịch bản vào `data/inbox/`, n8n chạy như bình thường).
+- **Danh sách tập**: trạng thái Đang xử lý (%) / Chờ duyệt / Đã đăng / Lỗi ở bước nào.
+- **Trang của tập**: xem video và Shorts, thumbnail, tiêu đề/mô tả/tags (có nút Copy), caption TikTok,
+  tải file đầu ra, **Duyệt / Từ chối** (tương đương nút trên Telegram), chạy lại pipeline hoặc một
+  bước, gửi lại TikTok.
+
+Cổng 8000 mở cho cả mạng LAN (để link trong Telegram mở được từ điện thoại), nên ai cùng mạng cũng
+vào được trang này. Đừng dùng trên WiFi công cộng.
+
+### Không dùng giao diện web
+
 1. Mở Voice Studio.
 2. Thả `tap-moi.md` vào `data/inbox/` (hoặc
    `curl -F file=@tap-moi.md http://localhost:5678/webhook/podcast/upload`).

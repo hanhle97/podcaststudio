@@ -539,6 +539,32 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/approval",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ approve_url: $('Soạn bản nháp').first().json.approve_url, reject_url: $('Soạn bản nháp').first().json.reject_url, hours: 48 }) }}"
+      },
+      "id": "4481d401-059f-5eec-bfd5-61e285a2b754",
+      "name": "Lưu link duyệt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3190,
+        60
+      ]
+    },
+    {
+      "parameters": {
         "resume": "webhook",
         "httpMethod": "GET",
         "responseMode": "onReceived",
@@ -1172,7 +1198,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst s = $('Tóm tắt tập').first().json;\nconst yt = $('Upload YouTube').first().json;\nconst cap = $('Upload phụ đề').first().json;\nconst shorts = $('Gom Shorts').first().json;\nconst ep = $('Episode').first().json;\nconst lines = [\n  `✅ <b>Đã upload YouTube</b> (${esc($env.YOUTUBE_PRIVACY || 'private')})`,\n  esc(s.title),\n  `https://youtu.be/${yt.uploadId || yt.id}`,\n  `Phụ đề: ${cap.statusCode === 200 ? 'đã thêm' : 'lỗi ' + cap.statusCode}`,\n];\nif (shorts.short_ids.length) {\n  lines.push(`📱 YouTube Shorts (${shorts.short_ids.length}):`);\n  shorts.short_ids.forEach((id) => lines.push(`  https://youtube.com/shorts/${id}`));\n}\nif (shorts.short_errors.length) {\n  lines.push(`⚠️ ${shorts.short_errors.length} Short lỗi: ${esc(shorts.short_errors[0])}`);\n}\nlines.push(esc($input.first().json.tiktok_text));\nif (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');\nreturn [{ json: { text: lines.join('\\n') } }];"
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst s = $('Tóm tắt tập').first().json;\nconst yt = $('Upload YouTube').first().json;\nconst cap = $('Upload phụ đề').first().json;\nconst shorts = $('Gom Shorts').first().json;\nconst ep = $('Episode').first().json;\nconst lines = [\n  `✅ <b>Đã upload YouTube</b> (${esc($env.YOUTUBE_PRIVACY || 'private')})`,\n  esc(s.title),\n  `https://youtu.be/${yt.uploadId || yt.id}`,\n  `Phụ đề: ${cap.statusCode === 200 ? 'đã thêm' : 'lỗi ' + cap.statusCode}`,\n];\nif (shorts.short_ids.length) {\n  lines.push(`📱 YouTube Shorts (${shorts.short_ids.length}):`);\n  shorts.short_ids.forEach((id) => lines.push(`  https://youtube.com/shorts/${id}`));\n}\nif (shorts.short_errors.length) {\n  lines.push(`⚠️ ${shorts.short_errors.length} Short lỗi: ${esc(shorts.short_errors[0])}`);\n}\nlines.push(esc($input.first().json.tiktok_text));\nif (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');\nreturn [{ json: { text: lines.join('\\n'), tiktok_text: $input.first().json.tiktok_text } }];"
       },
       "id": "dd9d3f62-7ef8-590b-96ca-d5bfd87583d8",
       "name": "Soạn tin đã đăng",
@@ -1230,6 +1256,58 @@
       "position": [
         3960,
         60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/publish-status",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ state: 'published', youtube_id: $('Upload YouTube').first().json.uploadId || $('Upload YouTube').first().json.id, short_ids: $('Gom Shorts').first().json.short_ids, tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null }) }}"
+      },
+      "id": "0d66c8bc-8ef6-5ab8-ac16-518d06b1b61f",
+      "name": "Ghi kết quả đăng",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8360,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/publish-status",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ state: $('Chờ duyệt').first().json.query?.decision === 'reject' ? 'rejected' : 'expired' }) }}"
+      },
+      "id": "ca3cd776-73f1-5b8f-ae20-7e99e7eb5a27",
+      "name": "Ghi kết quả từ chối",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        200
       ]
     },
     {
@@ -1650,6 +1728,17 @@
       "main": [
         [
           {
+            "node": "Lưu link duyệt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lưu link duyệt": {
+      "main": [
+        [
+          {
             "node": "Chờ duyệt",
             "type": "main",
             "index": 0
@@ -1981,6 +2070,11 @@
             "node": "Gửi thông báo",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Ghi kết quả đăng",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -2001,6 +2095,11 @@
         [
           {
             "node": "Gửi thông báo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ghi kết quả từ chối",
             "type": "main",
             "index": 0
           }

@@ -183,6 +183,10 @@ return [{ json: { text, approve_url: `${base}${sep}decision=approve`, reject_url
 """)
 telegram("Gửi bản nháp", (3080, -100), "={{ $json.text }}",
          [("✅ Duyệt", "={{ $json.approve_url }}"), ("❌ Từ chối", "={{ $json.reject_url }}")])
+http("Lưu link duyệt", (3190, 60), "POST",
+     f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/approval",
+     json_body="={{ JSON.stringify({ approve_url: $('Soạn bản nháp').first().json.approve_url, "
+               "reject_url: $('Soạn bản nháp').first().json.reject_url, hours: 48 }) }}")
 node("Chờ duyệt", "wait", 1.1, (3300, -100), {
     "resume": "webhook", "httpMethod": "GET", "responseMode": "onReceived",
     "limitWaitTime": True, "limitType": "afterTimeInterval", "resumeAmount": 48,
@@ -322,7 +326,7 @@ if (shorts.short_errors.length) {
 }
 lines.push(esc($input.first().json.tiktok_text));
 if (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');
-return [{ json: { text: lines.join('\n') } }];
+return [{ json: { text: lines.join('\n'), tiktok_text: $input.first().json.tiktok_text } }];
 """)
 
 http("Chuyển script vào rejected", (3740, 60), "POST", f"{MEDIA}/inbox/archive",
@@ -331,6 +335,20 @@ set_node("Tin từ chối", (3960, 60), {"text": (
     "={{ $('Chờ duyệt').item.json.query?.decision === 'reject' ? '🚫 Đã từ chối' : "
     "'⌛ Hết 48 giờ chưa duyệt, đã bỏ qua' }}: {{ $('Tóm tắt tập').item.json.title }}\n"
     "Không upload YouTube.")})
+
+# --- report outcomes to media-service (web UI status); never blocks the run ------------
+
+http("Ghi kết quả đăng", (8360, -100), "POST",
+     f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish-status",
+     json_body="={{ JSON.stringify({ state: 'published', "
+               "youtube_id: $('Upload YouTube').first().json.uploadId || "
+               "$('Upload YouTube').first().json.id, "
+               "short_ids: $('Gom Shorts').first().json.short_ids, "
+               "tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null }) }}")
+http("Ghi kết quả từ chối", (4180, 200), "POST",
+     f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish-status",
+     json_body="={{ JSON.stringify({ state: $('Chờ duyệt').first().json.query?.decision "
+               "=== 'reject' ? 'rejected' : 'expired' }) }}")
 
 # --- errors -----------------------------------------------------------------------------
 
@@ -391,7 +409,8 @@ link("Quá thời gian?", "Lỗi quá thời gian", 0)
 link("Quá thời gian?", "Đợi 15 giây", 1)
 link("Tóm tắt tập", "Soạn bản nháp")
 link("Soạn bản nháp", "Gửi bản nháp")
-link("Gửi bản nháp", "Chờ duyệt")
+link("Gửi bản nháp", "Lưu link duyệt")
+link("Lưu link duyệt", "Chờ duyệt")
 link("Chờ duyệt", "Được duyệt?")
 link("Được duyệt?", "Đọc video", 0)
 link("Được duyệt?", "Chuyển script vào rejected", 1)
@@ -422,8 +441,10 @@ link("TikTok quá lâu?", "Đợi TikTok", 1)
 for done in ("TikTok xong", "TikTok lỗi", "TikTok quá lâu", "TikTok bỏ qua"):
     link(done, "Soạn tin đã đăng")
 link("Soạn tin đã đăng", "Gửi thông báo")
+link("Soạn tin đã đăng", "Ghi kết quả đăng")
 link("Chuyển script vào rejected", "Tin từ chối")
 link("Tin từ chối", "Gửi thông báo")
+link("Tin từ chối", "Ghi kết quả từ chối")
 for err in ("Lỗi kịch bản", "Lỗi Voice Studio", "Lỗi pipeline", "Lỗi quá thời gian",
             "Lỗi workflow"):
     link(err, "Soạn tin lỗi")
