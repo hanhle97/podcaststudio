@@ -850,7 +850,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all().map((i) => i.json);\nconst ids = items.map((j) => j.uploadId || j.id).filter(Boolean);\nconst errors = items.filter((j) => j.error).map((j) => String(j.error.message || j.error).slice(0, 160));\nreturn [{ json: { short_ids: ids, short_errors: errors } }];"
+        "jsCode": "const items = $input.all().map((i) => i.json);\nconst ids = items.map((j) => j.uploadId || j.id).filter(Boolean);\n// n8n's message is generic (\"Bad request\"); YouTube's own reason (e.g. uploadLimitExceeded)\n// is in description\nconst errors = items.filter((j) => j.error).map((j) =>\n  String(j.error.description || j.error.message || j.error).slice(0, 200));\nreturn [{ json: { short_ids: ids, short_errors: errors } }];"
       },
       "id": "e8a9537b-8d1e-5265-aaa5-fe268b45aab6",
       "name": "Gom Shorts",

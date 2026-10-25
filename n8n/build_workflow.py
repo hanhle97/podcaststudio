@@ -265,7 +265,10 @@ node("Upload Short YouTube", "youTube", 1, (5720, -360), {
 code("Gom Shorts", (5940, -260), r"""
 const items = $input.all().map((i) => i.json);
 const ids = items.map((j) => j.uploadId || j.id).filter(Boolean);
-const errors = items.filter((j) => j.error).map((j) => String(j.error.message || j.error).slice(0, 160));
+// n8n's message is generic ("Bad request"); YouTube's own reason (e.g. uploadLimitExceeded)
+// is in description
+const errors = items.filter((j) => j.error).map((j) =>
+  String(j.error.description || j.error.message || j.error).slice(0, 200));
 return [{ json: { short_ids: ids, short_errors: errors } }];
 """)
 
