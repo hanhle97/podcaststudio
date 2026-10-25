@@ -17,10 +17,13 @@ MB = 1024 * 1024
 
 def test_chunk_plan_rules():
     assert chunk_plan(3 * MB) == (3 * MB, 1)                  # under 5 MB: whole file
-    assert chunk_plan(12 * MB) == (10 * MB, 1)                # last chunk absorbs the rest
-    size = 50_000_123
+    # real Shorts are 8-10 MB: chunk_size must never exceed the file (TikTok 400)
+    for size in (int(8.63 * MB), int(9.46 * MB), 12 * MB, 64 * MB):
+        chunk, count = chunk_plan(size)
+        assert (chunk, count) == (size, 1) and chunk <= size
+    size = 150_000_123                                        # > 64 MB: split
     chunk, count = chunk_plan(size)
-    assert (chunk, count) == (10 * MB, 4)
+    assert (chunk, count) == (10 * MB, size // (10 * MB))
     ranges = chunk_ranges(size, chunk, count)
     assert ranges[0] == (0, 10 * MB - 1) and ranges[-1][1] == size - 1
     assert sum(b - a + 1 for a, b in ranges) == size
@@ -120,7 +123,7 @@ def test_publish_video_chunks_and_status(tmp_path):
     res = client.publish_video(video, "Tiêu đề", "SELF_ONLY")
     assert res == {"publish_id": "p1", "status": "PUBLISH_COMPLETE", "post_id": None}
     src = fake.init_body["source_info"]
-    assert src == {"source": "FILE_UPLOAD", "video_size": 12 * MB, "chunk_size": 10 * MB,
+    assert src == {"source": "FILE_UPLOAD", "video_size": 12 * MB, "chunk_size": 12 * MB,
                    "total_chunk_count": 1}
     assert fake.init_body["post_info"]["privacy_level"] == "SELF_ONLY"
     assert fake.puts == [f"bytes 0-{12 * MB - 1}/{12 * MB}"]

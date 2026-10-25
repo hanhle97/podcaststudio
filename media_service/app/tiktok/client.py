@@ -34,12 +34,13 @@ class TikTokError(Exception):
 def chunk_plan(size: int, chunk: int = DEFAULT_CHUNK) -> tuple[int, int]:
     """(chunk_size, total_chunk_count) following the media transfer rules.
 
-    Under 5 MB the file goes whole; otherwise count = floor(size / chunk) and the
-    last chunk absorbs the remainder.
+    Files up to 64 MB go in one piece (chunk_size = file size; TikTok rejects a
+    chunk_size larger than the video). Bigger files use `chunk`-sized pieces with
+    count = floor(size / chunk); the last piece absorbs the remainder.
     """
     if size <= 0:
         raise TikTokError("File video rỗng.")
-    if size < MIN_CHUNK:
+    if size <= MAX_CHUNK:
         return size, 1
     chunk = max(MIN_CHUNK, min(chunk, MAX_CHUNK))
     return chunk, max(1, size // chunk)
