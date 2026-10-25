@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
+import secrets
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app import inbox
@@ -18,6 +21,8 @@ from app.jobs import EpisodeBusyError, Job, JobManager
 from app.pipeline import PIPELINE, STEPS, StepEnv, run_steps
 from app.script import ScriptParseError
 from app.summary import build_summary
+from app.tiktok import publish as tiktok_publish
+from app.tiktok.client import TikTokError
 from app.tts import TTSError, get_provider
 
 settings = get_settings()
@@ -153,6 +158,75 @@ async def archive_inbox(body: ArchiveRequest) -> dict:
     except inbox.InboxError as e:
         raise HTTPException(404, str(e)) from e
     return {"moved_to": str(dest.relative_to(settings.data_dir).as_posix())}
+
+
+# --- TikTok ------------------------------------------------------------------------
+
+
+@app.get("/tiktok/status")
+async def tiktok_status() -> dict:
+    client = tiktok_publish.client_from_settings(settings)
+    token = client.store.load()
+    info: dict = {"configured": client.configured(), "connected": token is not None,
+                  "privacy": settings.tiktok_privacy, "max_clips": settings.tiktok_max_clips}
+    if token:
+        try:
+            creator = await asyncio.to_thread(client.creator_info)
+            info.update(creator=creator.get("creator_username"),
+                        privacy_options=creator.get("privacy_level_options"))
+        except TikTokError as e:
+            info.update(connected=False, error=str(e))
+    return info
+
+
+@app.get("/tiktok/auth/start")
+async def tiktok_auth_start(request: Request) -> RedirectResponse:
+    client = tiktok_publish.client_from_settings(settings)
+    state = secrets.token_urlsafe(24)
+    now = time.time()
+    states = {k: v for k, v in getattr(request.app.state, "tiktok_states", {}).items() if v > now}
+    states[state] = now + 600
+    request.app.state.tiktok_states = states
+    try:
+        return RedirectResponse(client.authorize_url(state))
+    except TikTokError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/tiktok/auth/callback", response_class=HTMLResponse)
+async def tiktok_auth_callback(request: Request, code: str = "", state: str = "",
+                               error: str = "", error_description: str = "") -> HTMLResponse:
+    states = getattr(request.app.state, "tiktok_states", {})
+    if error:
+        return _page(f"TikTok từ chối: {error} {error_description}", ok=False)
+    if not code or states.pop(state, 0) < time.time():
+        return _page("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Mở lại /tiktok/auth/start.",
+                     ok=False)
+    client = tiktok_publish.client_from_settings(settings)
+    try:
+        await asyncio.to_thread(client.exchange_code, code)
+    except TikTokError as e:
+        return _page(str(e), ok=False)
+    return _page("Đã kết nối TikTok. Có thể đóng trang này và tắt tunnel.", ok=True)
+
+
+def _page(message: str, ok: bool) -> HTMLResponse:
+    color = "#15803d" if ok else "#b91c1c"
+    return HTMLResponse(f"<!doctype html><meta charset=utf-8><body style='font-family:sans-serif;"
+                        f"padding:40px'><h2 style='color:{color}'>{html.escape(message)}</h2>",
+                        status_code=200 if ok else 400)
+
+
+@app.post("/episodes/{episode_id}/publish/tiktok", status_code=202)
+async def publish_tiktok(request: Request, episode_id: str,
+                         max_clips: int | None = None) -> dict:
+    store(request).get(episode_id)
+    root = store(request).paths(episode_id).root
+    n = max_clips or settings.tiktok_max_clips
+    job = jobs(request).submit(
+        "publish:tiktok", lambda ctx: tiktok_publish.run_publish_tiktok(settings, root, n, ctx),
+        episode_id=episode_id)
+    return {"job_id": job.id, "status_url": f"/jobs/{job.id}"}
 
 
 @app.get("/episodes")

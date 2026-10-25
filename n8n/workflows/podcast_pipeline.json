@@ -732,24 +732,454 @@
     },
     {
       "parameters": {
+        "jsCode": "const s = $('Tóm tắt tập').first().json;\nconst yt = $('Upload YouTube').first().json;\nconst mainId = yt.uploadId || yt.id;\nconst max = Number($env.YOUTUBE_SHORTS_MAX ?? 3);\nreturn (s.shorts || []).slice(0, max).map((c) => ({ json: {\n  path: c.path, name: c.name,\n  title: `${(c.title || s.title).slice(0, 90)} #Shorts`,\n  description: `${c.hook || ''}\\n\\nXem tập đầy đủ: https://youtu.be/${mainId}\\n\\n#Shorts`.trim(),\n} }));"
+      },
+      "id": "c338398d-960c-56c4-b8e3-65410128da3d",
+      "name": "Danh sách Shorts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        -260
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b9346352-128e-50b9-a230-fb7bce53a5fb",
+              "leftValue": "={{ $json.path ?? '' }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "159b17cc-f2c2-5df0-8af9-d91f5f4ec8cb",
+      "name": "Có Short để đăng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5280,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $json.path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "1db263b8-eda8-5dd8-bff2-2195926d12b7",
+      "name": "Đọc Short",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        5500,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Danh sách Shorts').item.json.title }}",
+        "regionCode": "VN",
+        "categoryId": "={{ $env.YOUTUBE_CATEGORY_ID || '22' }}",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ $('Danh sách Shorts').item.json.description }}",
+          "tags": "={{ $('Tóm tắt tập').first().json.tags_csv }}",
+          "privacyStatus": "={{ $env.YOUTUBE_PRIVACY || 'private' }}",
+          "defaultLanguage": "vi",
+          "selfDeclaredMadeForKids": false,
+          "notifySubscribers": false
+        }
+      },
+      "id": "ddf323c1-5af7-554a-8641-871c281e11c4",
+      "name": "Upload Short YouTube",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        5720,
+        -360
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map((i) => i.json);\nconst ids = items.map((j) => j.uploadId || j.id).filter(Boolean);\nconst errors = items.filter((j) => j.error).map((j) => String(j.error.message || j.error).slice(0, 160));\nreturn [{ json: { short_ids: ids, short_errors: errors } }];"
+      },
+      "id": "e8a9537b-8d1e-5265-aaa5-fe268b45aab6",
+      "name": "Gom Shorts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/tiktok/status",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b0b03ed4-7dfe-5d35-b1d6-86b84b8c7b78",
+      "name": "Trạng thái TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "04870fe3-ff7e-5649-8c9c-692d3473d950",
+              "leftValue": "={{ $json.connected === true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "cdd370d4-6e57-5a6d-a56f-67315af78cb0",
+      "name": "TikTok sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6380,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/publish/tiktok",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b6ceb263-3882-50f9-ac4d-a3c4363b7096",
+      "name": "Đăng TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6600,
+        -360
+      ]
+    },
+    {
+      "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "e89401f5-3bde-5fb2-acea-d3a08e535ed3",
-              "name": "text",
-              "value": "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n{{ $('Tóm tắt tập').item.json.title }}\nhttps://youtu.be/{{ $('Upload YouTube').item.json.uploadId || $('Upload YouTube').item.json.id }}\nPhụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : 'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}",
+              "id": "913fb6e4-7df1-5306-82f3-4c61dcfd499d",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "5677f6f9-5c5b-5f5d-ac80-3f6d028c8209",
-      "name": "Tin đã đăng",
+      "id": "a2a189ca-36ee-5e35-a3ac-eba50f5256ba",
+      "name": "Job TikTok",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        5060,
+        6820,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "4961ac8c-c017-5310-a21b-04cf39f75114",
+      "name": "Đợi TikTok",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        7040,
+        -360
+      ],
+      "webhookId": "5a4af335-a57b-5351-a5dd-6733cc76967e"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/jobs/{{ $('Job TikTok').item.json.job_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "9779a918-ddfc-547a-a358-6153138b2a14",
+      "name": "Kiểm tra TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7260,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e784ff84-12de-55c7-ac5a-1dbd811d5733",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "succeeded"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "xong"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d460d2bc-be03-5648-82cd-02095cbb4178",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "failed"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lỗi"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "đang chạy"
+        }
+      },
+      "id": "6591db11-362b-5719-be2f-8f1a9a942688",
+      "name": "Kết quả TikTok",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        7480,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7529c68f-bcf5-5c8f-a714-414f112d823f",
+              "leftValue": "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 30
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f2027152-e0f0-558d-aecb-12b7537c6455",
+      "name": "TikTok quá lâu?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7700,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a54786d4-a566-5777-86b0-ece34316796f",
+              "name": "tiktok_text",
+              "value": "={{ '🎵 TikTok: đã đăng ' + $json.result.posts.length + ' video (' + $json.result.privacy + ')' + ($json.result.creator ? ' @' + $json.result.creator : '') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b0976b44-5ab5-59e3-9b67-705204509439",
+      "name": "TikTok xong",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7700,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "99a5375e-4f40-516f-b150-4ad72e47c88f",
+              "name": "tiktok_text",
+              "value": "={{ '⚠️ TikTok lỗi: ' + ($json.error?.message || 'không rõ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ec556836-10d8-57f0-89ac-eebf33e3c724",
+      "name": "TikTok lỗi",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7700,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c603e5f4-285d-5038-a69e-b2db82ecd775",
+              "name": "tiktok_text",
+              "value": "⚠️ TikTok: quá 30 phút chưa xong",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a77f847d-9f17-5641-a143-8cef6207aa08",
+      "name": "TikTok quá lâu",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7920,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6ecb9e65-e910-5f56-bd8d-3482170a0c81",
+              "name": "tiktok_text",
+              "value": "={{ '🎵 TikTok: bỏ qua (' + ($json.configured ? ($json.error || 'chưa kết nối tài khoản') : 'chưa cấu hình') + ')' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6cb59225-21ae-5912-bb1c-f35d9b85886b",
+      "name": "TikTok bỏ qua",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6600,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst s = $('Tóm tắt tập').first().json;\nconst yt = $('Upload YouTube').first().json;\nconst cap = $('Upload phụ đề').first().json;\nconst shorts = $('Gom Shorts').first().json;\nconst ep = $('Episode').first().json;\nconst lines = [\n  `✅ <b>Đã upload YouTube</b> (${esc($env.YOUTUBE_PRIVACY || 'private')})`,\n  esc(s.title),\n  `https://youtu.be/${yt.uploadId || yt.id}`,\n  `Phụ đề: ${cap.statusCode === 200 ? 'đã thêm' : 'lỗi ' + cap.statusCode}`,\n];\nif (shorts.short_ids.length) {\n  lines.push(`📱 YouTube Shorts (${shorts.short_ids.length}):`);\n  shorts.short_ids.forEach((id) => lines.push(`  https://youtube.com/shorts/${id}`));\n}\nif (shorts.short_errors.length) {\n  lines.push(`⚠️ ${shorts.short_errors.length} Short lỗi: ${esc(shorts.short_errors[0])}`);\n}\nlines.push(esc($input.first().json.tiktok_text));\nif (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "dd9d3f62-7ef8-590b-96ca-d5bfd87583d8",
+      "name": "Soạn tin đã đăng",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8140,
         -260
       ]
     },
@@ -1315,14 +1745,236 @@
       "main": [
         [
           {
-            "node": "Tin đã đăng",
+            "node": "Danh sách Shorts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Tin đã đăng": {
+    "Danh sách Shorts": {
+      "main": [
+        [
+          {
+            "node": "Có Short để đăng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Có Short để đăng?": {
+      "main": [
+        [
+          {
+            "node": "Đọc Short",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gom Shorts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đọc Short": {
+      "main": [
+        [
+          {
+            "node": "Upload Short YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Short YouTube": {
+      "main": [
+        [
+          {
+            "node": "Gom Shorts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gom Shorts": {
+      "main": [
+        [
+          {
+            "node": "Trạng thái TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trạng thái TikTok": {
+      "main": [
+        [
+          {
+            "node": "TikTok sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "Đăng TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok bỏ qua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đăng TikTok": {
+      "main": [
+        [
+          {
+            "node": "Job TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job TikTok": {
+      "main": [
+        [
+          {
+            "node": "Đợi TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đợi TikTok": {
+      "main": [
+        [
+          {
+            "node": "Kiểm tra TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kiểm tra TikTok": {
+      "main": [
+        [
+          {
+            "node": "Kết quả TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kết quả TikTok": {
+      "main": [
+        [
+          {
+            "node": "TikTok xong",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok quá lâu?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok quá lâu?": {
+      "main": [
+        [
+          {
+            "node": "TikTok quá lâu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Đợi TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok xong": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok lỗi": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok quá lâu": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok bỏ qua": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soạn tin đã đăng": {
       "main": [
         [
           {

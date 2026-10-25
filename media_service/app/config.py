@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 1
     # base URL used in links sent to Telegram (must be reachable from your phone)
     media_public_url: str = "http://localhost:8000"
+
+    # TikTok Content Posting API (Direct Post). Redirect URI must be https (tunnel).
+    tiktok_client_key: str = ""
+    tiktok_client_secret: str = ""
+    tiktok_redirect_uri: str = ""
+    tiktok_privacy: str = "SELF_ONLY"  # unaudited apps may only post SELF_ONLY
+    tiktok_max_clips: int = 3
     log_level: str = "INFO"
 
     @property

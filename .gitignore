@@ -29,3 +29,4 @@ data/inbox/failed/*
 models/
 .pytest_tmp/
 n8n/workflows/*.local.json
+data/secrets/

@@ -27,6 +27,7 @@ def build_summary(root: Path, episode_id: str, public_url: str) -> dict[str, Any
     segments = _read_json(root / "segments.json") or {}
     shorts = sorted(p.name for p in (root / "shorts").glob("clip_*_9x16.mp4")) \
         if (root / "shorts").is_dir() else []
+    clips = _read_json(root / "render" / "clips_rendered.json") or []
     missing = [name for name in OUTPUTS.values() if not (root / name).exists()]
     duration = segments.get("duration", 0.0)
     return {
@@ -44,5 +45,10 @@ def build_summary(root: Path, episode_id: str, public_url: str) -> dict[str, Any
         "duration_text": fmt_ts(duration),
         "paths": {k: f"/data/episodes/{episode_id}/{v}" for k, v in OUTPUTS.items()},
         "urls": {k: f"{base}/{v}" for k, v in OUTPUTS.items()},
-        "shorts": [{"name": s, "url": f"{base}/shorts/{s}"} for s in shorts],
+        "shorts": [{"name": s, "url": f"{base}/shorts/{s}",
+                    "path": f"/data/episodes/{episode_id}/shorts/{s}",
+                    "title": (clips[i].get("title") if i < len(clips) else None)
+                    or meta.get("title"),
+                    "hook": (clips[i].get("hook") if i < len(clips) else "") or ""}
+                   for i, s in enumerate(shorts)],
     }

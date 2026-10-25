@@ -80,8 +80,8 @@ def set_node(name: str, pos, fields: dict[str, str]) -> str:
         "options": {}})
 
 
-def code(name: str, pos, js: str) -> str:
-    return node(name, "code", 2, pos, {"jsCode": js.strip()})
+def code(name: str, pos, js: str, **node_extra) -> str:
+    return node(name, "code", 2, pos, {"jsCode": js.strip()}, **node_extra)
 
 
 def telegram(name: str, pos, text: str, keyboard: list[tuple[str, str]] | None = None) -> str:
@@ -231,14 +231,100 @@ http("Upload phụ đề", (4620, -260), "POST",
          "body": "={{ $json.body }}"})
 http("Chuyển script vào done", (4840, -260), "POST", f"{MEDIA}/inbox/archive",
      json_body="={{ JSON.stringify({ path: $('Episode').item.json.inbox_file, to: 'done' }) }}")
-set_node("Tin đã đăng", (5060, -260), {"text": (
-    "=✅ <b>Đã upload YouTube</b> ({{ $env.YOUTUBE_PRIVACY || 'private' }})\n"
-    "{{ $('Tóm tắt tập').item.json.title }}\n"
-    "https://youtu.be/{{ $('Upload YouTube').item.json.uploadId || "
-    "$('Upload YouTube').item.json.id }}\n"
-    "Phụ đề: {{ $('Upload phụ đề').item.json.statusCode === 200 ? 'đã thêm' : "
-    "'lỗi ' + $('Upload phụ đề').item.json.statusCode }}\n"
-    "{{ $('Episode').item.json.inbox_file ? 'Script đã chuyển vào inbox/done/' : '' }}")})
+# --- YouTube Shorts (first YOUTUBE_SHORTS_MAX clips; API quota ~6 uploads/day) -----------
+
+code("Danh sách Shorts", (5060, -260), r"""
+const s = $('Tóm tắt tập').first().json;
+const yt = $('Upload YouTube').first().json;
+const mainId = yt.uploadId || yt.id;
+const max = Number($env.YOUTUBE_SHORTS_MAX ?? 3);
+return (s.shorts || []).slice(0, max).map((c) => ({ json: {
+  path: c.path, name: c.name,
+  title: `${(c.title || s.title).slice(0, 90)} #Shorts`,
+  description: `${c.hook || ''}\n\nXem tập đầy đủ: https://youtu.be/${mainId}\n\n#Shorts`.trim(),
+} }));
+""", alwaysOutputData=True)
+if_node("Có Short để đăng?", (5280, -260), cond("={{ $json.path ?? '' }}", "notEmpty"))
+node("Đọc Short", "readWriteFile", 1.1, (5500, -360), {
+    "operation": "read", "fileSelector": "={{ $json.path }}",
+    "options": {"dataPropertyName": "data"}})
+node("Upload Short YouTube", "youTube", 1, (5720, -360), {
+    "resource": "video", "operation": "upload",
+    "title": "={{ $('Danh sách Shorts').item.json.title }}", "regionCode": "VN",
+    "categoryId": "={{ $env.YOUTUBE_CATEGORY_ID || '22' }}", "binaryProperty": "data",
+    "options": {"description": "={{ $('Danh sách Shorts').item.json.description }}",
+                "tags": "={{ $('Tóm tắt tập').first().json.tags_csv }}",
+                "privacyStatus": "={{ $env.YOUTUBE_PRIVACY || 'private' }}",
+                "defaultLanguage": "vi", "selfDeclaredMadeForKids": False,
+                "notifySubscribers": False}},
+    onError="continueRegularOutput")
+code("Gom Shorts", (5940, -260), r"""
+const items = $input.all().map((i) => i.json);
+const ids = items.map((j) => j.uploadId || j.id).filter(Boolean);
+const errors = items.filter((j) => j.error).map((j) => String(j.error.message || j.error).slice(0, 160));
+return [{ json: { short_ids: ids, short_errors: errors } }];
+""")
+
+# --- TikTok (media-service does the API work; skipped when not connected) ---------------
+
+http("Trạng thái TikTok", (6160, -260), "GET", f"{MEDIA}/tiktok/status", full=False)
+if_node("TikTok sẵn sàng?", (6380, -260), cond("={{ $json.connected === true }}", "true",
+                                                type_="boolean"))
+http("Đăng TikTok", (6600, -360), "POST",
+     f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish/tiktok")
+set_node("Job TikTok", (6820, -360), {"job_id": "={{ $json.body.job_id }}"})
+node("Đợi TikTok", "wait", 1.1, (7040, -360), {"amount": 20, "unit": "seconds"},
+     webhookId=uid("wait-tiktok"))
+http("Kiểm tra TikTok", (7260, -360), "GET",
+     "={{ $env.MEDIA_SERVICE_URL }}/jobs/{{ $('Job TikTok').item.json.job_id }}",
+     full=False, never_error=False)
+node("Kết quả TikTok", "switch", 3.2, (7480, -360), {
+    "rules": {"values": [
+        {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
+                                    "typeValidation": "strict", "version": 2},
+                        "conditions": [cond("={{ $json.status }}", "equals", "succeeded")],
+                        "combinator": "and"}, "renameOutput": True, "outputKey": "xong"},
+        {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
+                                    "typeValidation": "strict", "version": 2},
+                        "conditions": [cond("={{ $json.status }}", "equals", "failed")],
+                        "combinator": "and"}, "renameOutput": True, "outputKey": "lỗi"}]},
+    "options": {"fallbackOutput": "extra", "renameFallbackOutput": "đang chạy"}})
+if_node("TikTok quá lâu?", (7700, -200), cond(
+    "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
+    "gt", 30, "number"))
+set_node("TikTok xong", (7700, -500), {"tiktok_text": (
+    "={{ '🎵 TikTok: đã đăng ' + $json.result.posts.length + ' video (' + "
+    "$json.result.privacy + ')' + ($json.result.creator ? ' @' + $json.result.creator : '') }}")})
+set_node("TikTok lỗi", (7700, -360), {
+    "tiktok_text": "={{ '⚠️ TikTok lỗi: ' + ($json.error?.message || 'không rõ') }}"})
+set_node("TikTok quá lâu", (7920, -200), {"tiktok_text": "⚠️ TikTok: quá 30 phút chưa xong"})
+set_node("TikTok bỏ qua", (6600, -160), {"tiktok_text": (
+    "={{ '🎵 TikTok: bỏ qua (' + ($json.configured ? ($json.error || 'chưa kết nối tài khoản') "
+    ": 'chưa cấu hình') + ')' }}")})
+code("Soạn tin đã đăng", (8140, -260), r"""
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const s = $('Tóm tắt tập').first().json;
+const yt = $('Upload YouTube').first().json;
+const cap = $('Upload phụ đề').first().json;
+const shorts = $('Gom Shorts').first().json;
+const ep = $('Episode').first().json;
+const lines = [
+  `✅ <b>Đã upload YouTube</b> (${esc($env.YOUTUBE_PRIVACY || 'private')})`,
+  esc(s.title),
+  `https://youtu.be/${yt.uploadId || yt.id}`,
+  `Phụ đề: ${cap.statusCode === 200 ? 'đã thêm' : 'lỗi ' + cap.statusCode}`,
+];
+if (shorts.short_ids.length) {
+  lines.push(`📱 YouTube Shorts (${shorts.short_ids.length}):`);
+  shorts.short_ids.forEach((id) => lines.push(`  https://youtube.com/shorts/${id}`));
+}
+if (shorts.short_errors.length) {
+  lines.push(`⚠️ ${shorts.short_errors.length} Short lỗi: ${esc(shorts.short_errors[0])}`);
+}
+lines.push(esc($input.first().json.tiktok_text));
+if (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');
+return [{ json: { text: lines.join('\n') } }];
+""")
 
 http("Chuyển script vào rejected", (3740, 60), "POST", f"{MEDIA}/inbox/archive",
      json_body="={{ JSON.stringify({ path: $('Episode').item.json.inbox_file, to: 'rejected' }) }}")
@@ -315,8 +401,28 @@ link("Upload YouTube", "Lấy phụ đề SRT")
 link("Lấy phụ đề SRT", "Soạn phụ đề")
 link("Soạn phụ đề", "Upload phụ đề")
 link("Upload phụ đề", "Chuyển script vào done")
-link("Chuyển script vào done", "Tin đã đăng")
-link("Tin đã đăng", "Gửi thông báo")
+link("Chuyển script vào done", "Danh sách Shorts")
+link("Danh sách Shorts", "Có Short để đăng?")
+link("Có Short để đăng?", "Đọc Short", 0)
+link("Có Short để đăng?", "Gom Shorts", 1)
+link("Đọc Short", "Upload Short YouTube")
+link("Upload Short YouTube", "Gom Shorts")
+link("Gom Shorts", "Trạng thái TikTok")
+link("Trạng thái TikTok", "TikTok sẵn sàng?")
+link("TikTok sẵn sàng?", "Đăng TikTok", 0)
+link("TikTok sẵn sàng?", "TikTok bỏ qua", 1)
+link("Đăng TikTok", "Job TikTok")
+link("Job TikTok", "Đợi TikTok")
+link("Đợi TikTok", "Kiểm tra TikTok")
+link("Kiểm tra TikTok", "Kết quả TikTok")
+link("Kết quả TikTok", "TikTok xong", 0)
+link("Kết quả TikTok", "TikTok lỗi", 1)
+link("Kết quả TikTok", "TikTok quá lâu?", 2)
+link("TikTok quá lâu?", "TikTok quá lâu", 0)
+link("TikTok quá lâu?", "Đợi TikTok", 1)
+for done in ("TikTok xong", "TikTok lỗi", "TikTok quá lâu", "TikTok bỏ qua"):
+    link(done, "Soạn tin đã đăng")
+link("Soạn tin đã đăng", "Gửi thông báo")
 link("Chuyển script vào rejected", "Tin từ chối")
 link("Tin từ chối", "Gửi thông báo")
 for err in ("Lỗi kịch bản", "Lỗi Voice Studio", "Lỗi pipeline", "Lỗi quá thời gian",
@@ -343,6 +449,7 @@ CREDENTIAL_SLOTS = {  # node -> credential type it needs
     "Gửi thông báo": "telegramApi",
     "Upload YouTube": "youTubeOAuth2Api",
     "Upload phụ đề": "youTubeOAuth2Api",
+    "Upload Short YouTube": "youTubeOAuth2Api",
 }
 
 
