@@ -20,6 +20,10 @@ data/cache/
 data/inbox/*.md
 data/inbox/done/*
 !data/inbox/done/.gitkeep
+data/inbox/rejected/*
+!data/inbox/rejected/.gitkeep
+data/inbox/failed/*
+!data/inbox/failed/.gitkeep
 
 # Model caches
 models/
