@@ -160,6 +160,39 @@ docker compose up -d
 sh n8n/import_workflow.sh
 ```
 
+### 3.4 Shorts lên YouTube và TikTok
+
+Sau khi bấm **Duyệt** và video chính lên YouTube, workflow upload tiếp **tối đa
+`YOUTUBE_SHORTS_MAX` Short** (mặc định 3) với tiêu đề clip + `#Shorts` và link về tập đầy đủ.
+Hạn mức YouTube API mặc định là 10.000 đơn vị/ngày, mỗi lần upload ~1.600, nên một tập
+(video + phụ đề + 3 Short) dùng khoảng 7.000. Short lỗi không chặn phần còn lại.
+
+**TikTok** (tùy chọn, Content Posting API chính thức). Chưa cấu hình thì bước này được bỏ qua.
+
+1. Vào [developers.tiktok.com](https://developers.tiktok.com) → *Manage apps* → tạo app. TikTok
+   yêu cầu icon, mô tả, link *Terms of Service* và *Privacy Policy* (một trang web của bạn).
+2. Thêm sản phẩm **Login Kit** và **Content Posting API** (bật *Direct Post*), scope
+   `user.info.basic` và `video.publish`.
+3. Tạo **Sandbox**, thêm tài khoản TikTok của bạn làm *target user* (chấp nhận lời mời trong app TikTok).
+4. Điền `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` vào `.env`.
+5. Kết nối tài khoản (redirect URI của TikTok bắt buộc HTTPS, nên mở tunnel tạm thời):
+
+   ```bash
+   docker run --rm cloudflare/cloudflared:2025.9.1 tunnel --url http://host.docker.internal:8000
+   ```
+
+   Lệnh in ra `https://<tên-ngẫu-nhiên>.trycloudflare.com`. Đăng ký
+   `https://<tên>.trycloudflare.com/tiktok/auth/callback` làm Redirect URI trong Login Kit, đặt đúng
+   chuỗi đó vào `TIKTOK_REDIRECT_URI`, chạy `docker compose up -d`, rồi mở
+   `https://<tên>.trycloudflare.com/tiktok/auth/start` và đăng nhập TikTok. Thấy "Đã kết nối TikTok"
+   thì **tắt tunnel ngay** (Ctrl+C): trong lúc tunnel bật, media-service mở ra Internet không mật khẩu.
+6. Kiểm tra: `curl http://localhost:8000/tiktok/status` → `"connected": true`.
+
+Token được lưu ở `data/secrets/tiktok_token.json` và tự làm mới (refresh token sống 365 ngày); chỉ
+cần làm lại bước 5 khi hết hạn hoặc bị thu hồi. App **chưa qua audit** của TikTok chỉ đăng được video
+**riêng tư** (`TIKTOK_PRIVACY=SELF_ONLY`); muốn đăng công khai phải gửi app cho TikTok duyệt.
+Đăng lại một tập không tạo video trùng (`data/episodes/<id>/publish/tiktok.json`).
+
 Các biến khác: `YOUTUBE_PRIVACY` (private | unlisted | public, mặc định private),
 `YOUTUBE_CATEGORY_ID` (22 People & Blogs, 27 Education, 28 Science & Technology),
 `PIPELINE_TIMEOUT_MIN` (mặc định 120).
