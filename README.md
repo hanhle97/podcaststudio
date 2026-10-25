@@ -72,6 +72,28 @@ Mức khớp ghi trong `align_report.json`.
 tự/dòng, ≤ 2 dòng, ngắt theo câu và dấu phẩy, không vắt chapter), `subtitles.ass` + `karaoke.json`
 (cụm 2–4 từ, tô sáng từng từ, cho Shorts).
 
+## LLM: metadata, chapters, chọn clip (Claude Code subscription)
+
+LLM chạy qua **Claude Code CLI** (cài sẵn trong image) bằng gói Claude subscription của bạn,
+không cần API key. Tạo token một lần:
+
+```bash
+docker compose exec -it media-service-gpu claude setup-token   # hoặc media-service-cpu
+```
+
+Mở link, đăng nhập, dán mã vào terminal. Token `sk-ant-oat01-…` in ra thì dán vào `.env`
+(`CLAUDE_CODE_OAUTH_TOKEN=`), rồi chạy `docker compose up -d` để nạp lại. Đổi model bằng
+`LLM_MODEL` (mặc định `sonnet`). Mỗi tập gọi khoảng 2–3 lần, trừ vào hạn mức subscription.
+
+- `metadata.json`: tiêu đề (dùng `title` trong frontmatter nếu có, không thì ≤ 70 ký tự), mô tả
+  kèm mục lục YouTube `00:00 Tên`, 10–15 tags, 3 phương án text thumbnail. Chapters lấy từ `##`
+  kèm timestamp thật; chỉ khi không có heading thì LLM mới chia (mỗi chương ≥ 10 giây).
+- `clips.json`: 3–5 đoạn 30–60 giây cho Shorts (tập ngắn thì ít hơn). LLM chọn theo **id câu**,
+  nên timestamp luôn khớp ranh giới câu; code kiểm tra độ dài và chồng lấn.
+- Mọi output được validate bằng Pydantic; sai thì hỏi lại kèm lỗi (tối đa 3 lần).
+- `thumbnail.png` 1280×720: ảnh nền đầu tiên trong `assets/backgrounds/` (hoặc gradient), logo,
+  text thumbnail đầu tiên.
+
 ## Video (Remotion)
 
 Hai composition trong `remotion/src/compositions/`: `PodcastLandscape` (1920×1080, 30fps)

@@ -29,8 +29,12 @@ class Settings(BaseSettings):
     voice_studio_api_key: str = ""
     voice_studio_voice_id: str = ""
 
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5-5"
+    # LLM for metadata / clip selection. claude_code = Claude Code CLI on a subscription
+    # token (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`).
+    llm_provider: Literal["claude_code"] = "claude_code"
+    llm_model: str = "sonnet"
+    llm_timeout_s: float = 300
+    claude_code_oauth_token: str = ""
 
     whisper_device: Literal["auto", "cuda", "cpu"] = "auto"
     whisper_model: str = "large-v3-turbo"

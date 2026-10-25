@@ -210,6 +210,62 @@ SUBTITLES = Step(
     run=_subtitles_run,
 )
 
+def _metadata_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.llm.steps import run_metadata
+
+    return run_metadata(env, progress)
+
+
+METADATA = Step(
+    name="metadata",
+    label="Viết metadata (LLM)",
+    outputs=lambda env: [env.paths.root / "metadata.json", env.paths.root / "chapters.json"],
+    inputs=lambda env: [env.paths.script_json, env.paths.root / "segments.json",
+                        env.settings.llm_provider, env.settings.llm_model],
+    run=_metadata_run,
+)
+
+
+def _clips_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.llm.steps import run_clips
+
+    return run_clips(env, progress)
+
+
+CLIPS = Step(
+    name="clips",
+    label="Chọn clip Shorts (LLM)",
+    outputs=lambda env: [env.paths.root / "clips.json"],
+    inputs=lambda env: [env.paths.root / "segments.json", env.paths.root / "chapters.json",
+                        env.brand.shorts.model_dump_json(), env.settings.llm_provider,
+                        env.settings.llm_model],
+    run=_clips_run,
+)
+
+
+def _thumbnail_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
+    from app.thumbnail.render import run_thumbnail
+
+    return run_thumbnail(env, progress)
+
+
+def _thumbnail_inputs(env: StepEnv) -> list[Path | str]:
+    s = env.settings
+    images = sorted(p for p in s.backgrounds_dir.glob("*") if p.is_file())
+    logo = [s.assets_dir / env.brand.channel.logo] if env.brand.channel.logo else []
+    return [env.paths.root / "metadata.json", env.brand.model_dump_json(),
+            s.assets_dir / env.brand.fonts.bold, *images[:1], *logo]
+
+
+THUMBNAIL = Step(
+    name="thumbnail",
+    label="Tạo thumbnail",
+    outputs=lambda env: [env.paths.root / "thumbnail.png"],
+    inputs=_thumbnail_inputs,
+    run=_thumbnail_run,
+)
+
+
 def _render_run(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
     from app.render.remotion import run_render
 
@@ -225,6 +281,7 @@ def _render_inputs(env: StepEnv) -> list[Path | str]:
     return [
         env.options.get("format", "all"), root / "final_audio.wav", root / "segments.json",
         root / "words.json", root / "karaoke.json", root / "clips.json", root / "metadata.json",
+        root / "chapters.json",
         env.paths.script_json, env.brand.model_dump_json(), *src, *assets, *fonts, *logo,
     ]
 
@@ -245,6 +302,6 @@ RENDER = Step(
     run=_render_run,
 )
 
-# Order of the full pipeline; later phases append metadata, thumbnail, ...
-PIPELINE: list[Step] = [PARSE, TTS, MIX, ALIGN, SUBTITLES, RENDER]
+# Order of the full pipeline: metadata/clips come before render (title, clips, chapters).
+PIPELINE: list[Step] = [PARSE, TTS, MIX, ALIGN, SUBTITLES, METADATA, CLIPS, THUMBNAIL, RENDER]
 STEPS: dict[str, Step] = {s.name: s for s in PIPELINE}

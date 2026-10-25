@@ -181,6 +181,21 @@ async def step_subtitles(request: Request, episode_id: str) -> dict:
     return _submit(request, episode_id, ["subtitles"], True, "subtitles")
 
 
+@app.post("/episodes/{episode_id}/metadata", status_code=202)
+async def step_metadata(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["metadata"], True, "metadata")
+
+
+@app.post("/episodes/{episode_id}/clips/select", status_code=202)
+async def step_clips(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["clips"], True, "clips")
+
+
+@app.post("/episodes/{episode_id}/thumbnail", status_code=202)
+async def step_thumbnail(request: Request, episode_id: str) -> dict:
+    return _submit(request, episode_id, ["thumbnail"], True, "thumbnail")
+
+
 @app.post("/episodes/{episode_id}/render", status_code=202)
 async def step_render(request: Request, episode_id: str,
                       format: Literal["landscape", "short", "all"] = "all") -> dict:

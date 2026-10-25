@@ -132,6 +132,9 @@ def run_render(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
     work = root / "render"
     public, bundle = work / "public", work / "bundle"
     background, logo = prepare_public(env, public)
+    chapters_file = root / "chapters.json"  # LLM-named chapters when the script had none
+    if chapters_file.exists():
+        segments = {**segments, "chapters": json.loads(chapters_file.read_text(encoding="utf-8"))}
     props = build_props(segments=segments, words=words, karaoke=karaoke, brand=env.brand,
                         title=episode_title(env), background=background, logo=logo)
     remotion_dir = env.settings.remotion_dir

@@ -30,6 +30,10 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
+# Claude Code CLI: the LLM for metadata / clip selection (subscription token, see README)
+RUN npm install -g @anthropic-ai/claude-code@2.1.296 --no-audit --no-fund --loglevel=error \
+    && claude --version
+
 WORKDIR /remotion
 COPY remotion/package.json remotion/package-lock.json ./
 RUN npm ci --no-audit --no-fund --loglevel=error
