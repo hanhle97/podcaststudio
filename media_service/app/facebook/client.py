@@ -109,6 +109,15 @@ class FacebookClient:
         pages = self._get(f"{self.graph}/me/accounts", {
             "access_token": long_lived, "fields": "id,name,access_token,tasks",
             "limit": 100}).get("data", [])
+        if not pages:
+            perms = self._get(f"{self.graph}/me/permissions",
+                              {"access_token": long_lived}).get("data", [])
+            granted = [p["permission"] for p in perms if p.get("status") == "granted"]
+            declined = [p["permission"] for p in perms if p.get("status") != "granted"]
+            raise FacebookError(
+                "Facebook không trả về fanpage nào. Khi đăng nhập hãy chọn fanpage và bật đủ "
+                f"quyền. Đã cấp: {', '.join(granted) or 'không có'}; bị từ chối: "
+                f"{', '.join(declined) or 'không có'}.")
         page = pick_page(pages, self.page_wanted)
         if not page.get("access_token"):
             raise FacebookError(f"Không lấy được quyền đăng cho fanpage {page.get('name')}.")

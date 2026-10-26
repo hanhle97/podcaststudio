@@ -32,6 +32,10 @@ from app.tts import TTSError, get_provider
 settings = get_settings()
 logging.basicConfig(level=settings.log_level,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx logs full request URLs at INFO, and OAuth/Graph calls carry secrets and tokens there
+for _noisy in ("httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+log = logging.getLogger("app.main")
 
 
 @asynccontextmanager
@@ -299,6 +303,7 @@ async def facebook_auth_callback(request: Request, code: str = "", state: str = 
     try:
         token = await asyncio.to_thread(client.exchange_code, code)
     except FacebookError as e:
+        log.warning("Kết nối Facebook thất bại: %s", e)
         return _page(str(e), ok=False)
     return _page(f"Đã kết nối fanpage {token.page_name}. Có thể đóng trang này.", ok=True)
 

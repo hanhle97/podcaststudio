@@ -36,6 +36,10 @@ class FakeGraph:
             return httpx.Response(200, json={"access_token": "short-user"})
         if path == f"{G}/me/accounts":
             return httpx.Response(200, json={"data": self.pages})
+        if path == f"{G}/me/permissions":
+            return httpx.Response(200, json={"data": [
+                {"permission": "public_profile", "status": "granted"},
+                {"permission": "pages_show_list", "status": "declined"}]})
         if path.endswith("/videos") and req.url.host == "graph-video.facebook.com":
             self.next_id += 1
             return httpx.Response(200, json={"id": f"v{self.next_id}"})
@@ -188,3 +192,9 @@ def test_facebook_endpoints_without_config():
         assert c.get("/facebook/auth/callback", params={"error": "denied"}).status_code == 400
         st = c.get("/facebook/status").json()
         assert st["configured"] is False and st["connected"] is False
+
+
+def test_no_pages_explains_which_permissions_were_declined(tmp_path):
+    client = make_client(tmp_path, FakeGraph(pages=[]))
+    with pytest.raises(FacebookError, match="bị từ chối: pages_show_list"):
+        client.exchange_code("code")
