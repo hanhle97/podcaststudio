@@ -1,8 +1,10 @@
 """Voice Studio (OmniVoice) TTS provider.
 
-API (OpenAI compatible, see docs/api-auth.md in the Voice Studio repo):
-    POST /v1/audio/speech   {"model","input","voice","response_format","language","speed","seed"}
-                            -> audio bytes directly (no job id); max 4096 chars of input
+API (see docs/api-auth.md and docs/generation-parameters.md in the Voice Studio repo):
+    POST /generate          multipart form {text, profile_id, language, speed, seed, engine,
+                            num_step, class_temperature, effect_preset, ...} -> WAV bytes.
+                            Used instead of the OpenAI-style /v1/audio/speech because only the
+                            native endpoint accepts the expressive sampling knobs.
     GET  /v1/audio/voices   -> {"voices": [{"voice_id","name","type"}]}
     GET  /health
 Loopback calls need no auth; a configured OMNIVOICE_API_KEY is sent as Bearer.
@@ -84,14 +86,16 @@ class VoiceStudioProvider(TTSProvider):
         if len(request.text) > MAX_INPUT_CHARS:
             raise TTSError(f"Đoạn text dài {len(request.text)} ký tự, vượt giới hạn "
                            f"{MAX_INPUT_CHARS} của Voice Studio.")
-        payload: dict[str, Any] = {
-            "model": self.model, "input": request.text, "voice": request.voice_id,
-            "response_format": "wav", "language": request.language, "speed": request.speed,
-            **request.options,
+        form: dict[str, Any] = {
+            "text": request.text, "profile_id": request.voice_id, "engine": self.model,
+            "language": request.language, "speed": request.speed,
+            # one request = one take; Voice Studio must not split and crossfade it itself
+            "max_chunk_chars": 0, **request.options,
         }
         if request.seed is not None:
-            payload["seed"] = request.seed
-        response = self._request_with_retry("POST", "/v1/audio/speech", json=payload)
+            form["seed"] = request.seed
+        data = {k: str(v).lower() if isinstance(v, bool) else str(v) for k, v in form.items()}
+        response = self._request_with_retry("POST", "/generate", data=data)
         ctype = response.headers.get("content-type", "")
         if not ctype.startswith("audio/"):
             raise TTSError(f"Voice Studio trả về '{ctype}' thay vì audio: {response.text[:200]}")

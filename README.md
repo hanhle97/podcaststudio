@@ -45,7 +45,7 @@ data/inbox/tap.md ─▶ n8n ─▶ media-service (FastAPI)
 | Bước | Làm gì |
 |---|---|
 | **parse** | đọc kịch bản, báo lỗi theo dòng/cột kèm gợi ý |
-| **tts** | gọi Voice Studio từng câu, áp dụng từ điển phát âm; cache theo hash nên sửa 1 câu chỉ tạo lại câu đó |
+| **tts** | đọc 1–3 câu cùng đoạn trong một lượt (giữ nhịp tự nhiên), faster-whisper kiểm tra sót chữ rồi thử seed khác hoặc đọc từng câu, cắt lại thành từng câu; áp dụng từ điển phát âm; cache theo hash |
 | **mix** | ghép câu với khoảng nghỉ chuẩn, xử lý nhẹ (highpass, compressor), nhạc nền có ducking, loudnorm 2-pass |
 | **align** | faster-whisper (GPU nếu có) lấy timing từng từ, căn với chữ trong kịch bản |
 | **subtitles** | SRT (≤ 42 ký tự/dòng, ≤ 2 dòng), ASS karaoke, karaoke.json |
@@ -102,8 +102,13 @@ Mọi biến nằm trong `.env` (mẫu ở `.env.example`, có comment). File `.
 
 ### 3.1 Voice Studio
 
-Voice Studio phải **đang mở** khi chạy pipeline. API tương thích OpenAI (`POST /v1/audio/speech`),
-cổng mặc định 3900, gọi từ cùng máy không cần key.
+Voice Studio phải **đang mở** khi chạy pipeline. Service gọi API gốc `POST /generate` (nhận được
+các tham số biểu cảm như `class_temperature`), cổng mặc định 3900, gọi từ cùng máy không cần key.
+Mỗi lượt đọc được lưu vào lịch sử Generate của Voice Studio.
+
+Độ tự nhiên chỉnh trong `config/brand.yaml` → `tts`: `group_max_chars` (độ dài một lượt đọc),
+`sampling.class_temperature` (0 = đều đều, 0.6 = biểu cảm vừa). Đoạn ghi âm mẫu của voice profile
+quyết định nhiều nhất: mẫu đọc phẳng thì giọng clone cũng phẳng.
 
 | Voice Studio chạy ở đâu | `VOICE_STUDIO_URL` |
 |---|---|

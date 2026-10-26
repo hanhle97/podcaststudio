@@ -1,6 +1,6 @@
 import io
-import json
 import wave
+from urllib.parse import parse_qsl
 
 import httpx
 import pytest
@@ -29,21 +29,23 @@ def provider(handler, voice="v1", **kw):
                                transport=httpx.MockTransport(handler), **kw)
 
 
-def test_synthesize_sends_openai_payload():
+def test_synthesize_sends_native_generate_form():
     seen = {}
 
     def handler(req: httpx.Request):
-        seen.update(path=req.url.path, body=json.loads(req.content),
+        seen.update(path=req.url.path, body=dict(parse_qsl(req.content.decode())),
                     auth=req.headers.get("authorization"))
         return audio_response()
 
     res = provider(handler, api_key="secret").synthesize(
-        TTSRequest(text="Xin chào", voice_id="v1", seed=42))
+        TTSRequest(text="Xin chào", voice_id="v1", seed=42,
+                   options={"class_temperature": 0.6, "postprocess_output": False}))
     assert res.format == "wav" and res.audio.startswith(b"RIFF")
-    assert seen["path"] == "/v1/audio/speech" and seen["auth"] == "Bearer secret"
-    assert seen["body"] == {"model": "omnivoice", "input": "Xin chào", "voice": "v1",
-                            "response_format": "wav", "language": "vi", "speed": 1.0,
-                            "seed": 42}
+    assert seen["path"] == "/generate" and seen["auth"] == "Bearer secret"
+    assert seen["body"] == {"text": "Xin chào", "profile_id": "v1", "engine": "omnivoice",
+                            "language": "vi", "speed": "1.0", "max_chunk_chars": "0",
+                            "class_temperature": "0.6", "postprocess_output": "false",
+                            "seed": "42"}
 
 
 def test_retries_on_503_then_succeeds():

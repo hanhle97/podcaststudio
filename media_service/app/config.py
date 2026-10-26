@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -121,11 +121,15 @@ class TTSCfg(BaseModel):
     timeout_s: float = 300
     max_retries: int = 5
     voices: dict[str, str] = Field(default_factory=dict)  # speaker name -> voice id
+    group_max_chars: int = 170  # read up to this many chars of one paragraph per request; 0 = per sentence
+    min_word_match: float = 0.93  # a take covering less of the script is redone with the next seed
+    seed_attempts: int = 3
+    sampling: dict[str, Any] = Field(default_factory=dict)  # extra Voice Studio /generate fields
 
 
 class GapsCfg(BaseModel):
-    sentence: int = 250
-    paragraph: int = 600
+    sentence: int = 200
+    paragraph: int = 450
     chapter: int = 1200
 
 
@@ -161,7 +165,7 @@ class AudioCfg(BaseModel):
     gaps_ms: GapsCfg = Field(default_factory=GapsCfg)
     lead_in_ms: int = 500
     tail_ms: int = 1000
-    trim_silence_db: float = -50
+    trim_silence_db: float = -40
     highpass_hz: float = 60
     compressor: CompressorCfg = Field(default_factory=CompressorCfg)
     loudness: LoudnessCfg = Field(default_factory=LoudnessCfg)

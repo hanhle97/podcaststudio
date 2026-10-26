@@ -73,12 +73,16 @@ class Timeline:
 
 
 def compute_timeline(script: Script, durations: dict[str, float], cfg: AudioCfg,
-                     speech_texts: dict[str, str] | None = None) -> Timeline:
+                     speech_texts: dict[str, str] | None = None,
+                     glued: set[str] | None = None) -> Timeline:
     """Place every sentence on the timeline.
 
     Gaps: sentence gap within a paragraph, paragraph gap across paragraphs, chapter
     gap between chapters; [pause]/[music up] add their own duration on top.
+    Sentences in `glued` were read in the same take as the previous sentence and cut
+    out of it, so they follow it with no added gap (the voice's own pause is kept).
     """
+    glued = glued or set()
     gaps = cfg.gaps_ms
     t = cfg.lead_in_ms / 1000
     tl = Timeline(sample_rate=cfg.sample_rate, duration=0.0)
@@ -98,7 +102,7 @@ def compute_timeline(script: Script, durations: dict[str, float], cfg: AudioCfg,
                 t += item.seconds
                 continue
             assert isinstance(item, Sentence)
-            if prev is not None:
+            if prev is not None and item.id not in glued:
                 same = prev.paragraph == item.paragraph
                 t += (gaps.sentence if same else gaps.paragraph) / 1000
             dur = durations[item.id]

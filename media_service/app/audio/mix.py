@@ -117,7 +117,8 @@ def run_mix(env: StepEnv, progress: StepProgress) -> dict[str, Any]:
     # 1) voice track on its own timeline
     durations = {sid: info["duration"] for sid, info in sentences.items()}
     speech = {sid: info["speech_text"] for sid, info in sentences.items()}
-    tl = compute_timeline(script, durations, a, speech)
+    glued = {sid for sid, info in sentences.items() if info.get("glued")}
+    tl = compute_timeline(script, durations, a, speech, glued)
     voice_raw = audio_dir / "voice_raw.wav"
     render_voice_track(tl, {sid: root / info["file"] for sid, info in sentences.items()},
                        voice_raw)

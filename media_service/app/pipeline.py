@@ -147,6 +147,7 @@ TTS = Step(
         env.paths.script_json, env.settings.config_dir / "pronunciation.yaml",
         env.brand.tts.model_dump_json(), env.settings.voice_studio_voice_id,
         str(env.brand.audio.sample_rate), str(env.brand.audio.trim_silence_db),
+        env.settings.whisper_model,  # checks every take for skipped words
     ],
     run=_tts_run,
 )

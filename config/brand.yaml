@@ -37,16 +37,23 @@ tts:
   timeout_s: 300                  # per request (first request may load the model)
   max_retries: 5                  # on network errors / 5xx / timeouts, exponential backoff
   voices: {}                      # other speakers: {"Lan": "<voice_id>"}; default = VOICE_STUDIO_VOICE_ID
+  group_max_chars: 170            # read 1-3 sentences of a paragraph in one request (natural rhythm); 0 = one per sentence
+  min_word_match: 0.93            # faster-whisper checks every take; less of the script heard = retry with the next seed
+  seed_attempts: 3                # seeds tried per group before falling back to one sentence per request
+  sampling:                       # passed to Voice Studio POST /generate
+    num_step: 32                  # 16 = fast, 32 = quality preset
+    class_temperature: 0.6        # 0 = flat/greedy; 0.3-0.9 = more expressive intonation
+    effect_preset: raw            # no Voice Studio compression; our own chain runs in the mix step
 
 audio:
   sample_rate: 48000              # all speech is normalised to this rate, mono
   gaps_ms:                        # silence inserted between pieces of speech
-    sentence: 250                 # between sentences of the same paragraph
-    paragraph: 600                # after a blank line / speaker change
+    sentence: 200                 # between requests within a paragraph (sentences read together keep their own pause)
+    paragraph: 450                # after a blank line / speaker change
     chapter: 1200                 # between ## chapters (music rises here)
   lead_in_ms: 500                 # silence before the first word
   tail_ms: 1000                   # silence after the last word
-  trim_silence_db: -50            # trim TTS clip edges quieter than this
+  trim_silence_db: -40            # trim TTS clip edges quieter than this
   highpass_hz: 60                 # remove rumble below this frequency
   compressor:
     enabled: true                 # very gentle compression; set false to skip

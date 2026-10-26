@@ -1,7 +1,8 @@
 from app.audio.assemble import compute_timeline
-from app.config import AudioCfg
+from app.config import AudioCfg, GapsCfg
 from app.script import parse_script
 
+CFG = AudioCfg(gaps_ms=GapsCfg(sentence=250, paragraph=600, chapter=1200))
 SCRIPT = """## Một
 Câu một. Câu hai.
 
@@ -15,7 +16,7 @@ Câu năm.
 
 def test_gaps_pauses_and_chapters():
     s = parse_script(SCRIPT)
-    tl = compute_timeline(s, {x.id: 1.0 for x in s.sentences}, AudioCfg())
+    tl = compute_timeline(s, {x.id: 1.0 for x in s.sentences}, CFG)
     seg = {x.text: (x.start, x.end) for x in tl.segments}
     assert seg["Câu một."] == (0.5, 1.5)    # lead-in 500ms
     assert seg["Câu hai."] == (1.75, 2.75)  # +250ms sentence gap
@@ -35,3 +36,10 @@ def test_speech_text_kept_separately():
     tl = compute_timeline(s, {"s0001": 1.0}, AudioCfg(), {"s0001": "Dùng en ây en."})
     assert tl.segments[0].text == "Dùng n8n."
     assert tl.segments[0].speech_text == "Dùng en ây en."
+
+
+def test_glued_sentence_follows_without_gap():
+    s = parse_script(SCRIPT)
+    ids = [x.id for x in s.sentences]
+    tl = compute_timeline(s, {i: 1.0 for i in ids}, CFG, glued={ids[1]})
+    assert [(x.start, x.end) for x in tl.segments[:3]] == [(0.5, 1.5), (1.5, 2.5), (3.1, 4.1)]

@@ -14,6 +14,18 @@ def apply_pronunciation(text: str, mapping: dict[str, str]) -> str:
     return pattern.sub(lambda m: mapping[m.group(1)], text)
 
 
+QUOTES = "\"“”„«»"
+
+
+def speakable(text: str, mapping: dict[str, str]) -> str:
+    """What the voice is asked to say: pronunciation applied, quote marks removed.
+
+    Quoted speech makes the model skip the words around it, and quotes are silent anyway.
+    """
+    text = apply_pronunciation(text, mapping)
+    return " ".join(text.translate({ord(q): None for q in QUOTES}).split())
+
+
 def chunk_text(text: str, max_chars: int) -> list[str]:
     """Split one sentence into pieces <= max_chars, preferring , ; : then spaces.
 
