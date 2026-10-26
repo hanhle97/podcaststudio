@@ -25,6 +25,8 @@ from app.jobs import Job
 from app.pipeline import STEPS
 from app.script import parse_script
 from app.summary import build_summary
+from app.facebook import publish as facebook_publish
+from app.facebook.client import FacebookError
 from app.tiktok import publish as tiktok_publish
 from app.tiktok.client import TikTokError
 from app.tts import TTSError, get_provider
@@ -99,8 +101,8 @@ def _job_dict(job: Job | None) -> dict[str, Any] | None:
         return None
     data = job.model_dump(mode="json")
     step = STEPS.get(job.step or "")
-    data["step_label"] = step.label if step else ("Đăng TikTok" if job.step == "tiktok"
-                                                  else job.step)
+    data["step_label"] = step.label if step else {
+        "tiktok": "Đăng TikTok", "facebook": "Đăng Facebook"}.get(job.step or "", job.step)
     return data
 
 
@@ -162,13 +164,25 @@ async def system_status(request: Request) -> dict[str, Any]:
         except (TikTokError, asyncio.TimeoutError, httpx.HTTPError) as e:
             return {"ok": False, "optional": True, "message": str(e) or "Lỗi kết nối TikTok"}
 
+    async def facebook() -> dict[str, Any]:
+        client = facebook_publish.client_from_settings(settings)
+        if not client.configured():
+            return {"ok": False, "optional": True, "message": "Chưa cấu hình (tùy chọn)"}
+        if not client.store.load():
+            return {"ok": False, "optional": True, "message": "Chưa kết nối fanpage"}
+        try:
+            page = await asyncio.wait_for(asyncio.to_thread(client.page_info), 8)
+            return {"ok": True, "message": page.get("name", "")}
+        except (FacebookError, asyncio.TimeoutError, httpx.HTTPError) as e:
+            return {"ok": False, "optional": True, "message": str(e) or "Lỗi kết nối Facebook"}
+
     llm = {"ok": bool(settings.claude_code_oauth_token or
                       os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
            "message": f"Claude Code ({settings.llm_model})"}
     if not llm["ok"]:
         llm["message"] = "Chưa có CLAUDE_CODE_OAUTH_TOKEN"
-    v, n, t = await asyncio.gather(voice(), n8n(), tiktok())
-    return {"voice_studio": v, "claude": llm, "n8n": n, "tiktok": t}
+    v, n, t, f = await asyncio.gather(voice(), n8n(), tiktok(), facebook())
+    return {"voice_studio": v, "claude": llm, "n8n": n, "tiktok": t, "facebook": f}
 
 
 # --- scripts -----------------------------------------------------------------------------
@@ -234,6 +248,7 @@ async def episode_details(request: Request, episode_id: str) -> dict[str, Any]:
         "approval": _read(publish_dir(paths) / "approval.json"),
         "published": _read(publish_dir(paths) / "status.json"),
         "tiktok": _read(publish_dir(paths) / "tiktok.json"),
+        "facebook": _read(publish_dir(paths) / "facebook.json"),
         "jobs": [_job_dict(j) for j in jm.list(episode_id, limit=10)],
         "files": request.app.state.store.files(episode_id),
         "steps": [{"name": s.name, "label": s.label} for s in STEPS.values()],
@@ -258,6 +273,7 @@ class PublishStatus(BaseModel):
     youtube_id: str | None = None
     short_ids: list[str] = []
     tiktok: str | None = None
+    facebook: str | None = None
 
 
 @router.post("/episodes/{episode_id}/approval")

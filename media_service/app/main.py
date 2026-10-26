@@ -23,6 +23,8 @@ from app.jobs import EpisodeBusyError, Job, JobManager
 from app.pipeline import PIPELINE, STEPS, StepEnv, run_steps
 from app.script import ScriptParseError
 from app.summary import build_summary
+from app.facebook import publish as facebook_publish
+from app.facebook.client import FacebookError
 from app.tiktok import publish as tiktok_publish
 from app.tiktok.client import TikTokError
 from app.tts import TTSError, get_provider
@@ -244,6 +246,70 @@ async def publish_tiktok(request: Request, episode_id: str,
     n = max_clips or settings.tiktok_max_clips
     job = jobs(request).submit(
         "publish:tiktok", lambda ctx: tiktok_publish.run_publish_tiktok(settings, root, n, ctx),
+        episode_id=episode_id)
+    return {"job_id": job.id, "status_url": f"/jobs/{job.id}"}
+
+
+# --- Facebook fanpage ---------------------------------------------------------------------
+
+
+@app.get("/facebook/status")
+async def facebook_status() -> dict:
+    client = facebook_publish.client_from_settings(settings)
+    token = client.store.load()
+    info: dict = {"configured": client.configured(), "connected": token is not None,
+                  "post_video": settings.facebook_post_video,
+                  "max_reels": settings.facebook_max_reels}
+    if token:
+        info.update(page=token.page_name, page_id=token.page_id,
+                    pages=[p["name"] for p in token.pages])
+        try:
+            page = await asyncio.to_thread(client.page_info)
+            info.update(page=page.get("name"), link=page.get("link"))
+        except FacebookError as e:
+            info.update(connected=False, error=str(e))
+    return info
+
+
+@app.get("/facebook/auth/start")
+async def facebook_auth_start(request: Request) -> RedirectResponse:
+    client = facebook_publish.client_from_settings(settings)
+    state = secrets.token_urlsafe(24)
+    now = time.time()
+    states = {k: v for k, v in getattr(request.app.state, "facebook_states", {}).items()
+              if v > now}
+    states[state] = now + 600
+    request.app.state.facebook_states = states
+    try:
+        return RedirectResponse(client.authorize_url(state))
+    except FacebookError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/facebook/auth/callback", response_class=HTMLResponse)
+async def facebook_auth_callback(request: Request, code: str = "", state: str = "",
+                                 error: str = "", error_description: str = "") -> HTMLResponse:
+    states = getattr(request.app.state, "facebook_states", {})
+    if error:
+        return _page(f"Facebook từ chối: {error} {error_description}", ok=False)
+    if not code or states.pop(state, 0) < time.time():
+        return _page("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. "
+                     "Mở lại /facebook/auth/start.", ok=False)
+    client = facebook_publish.client_from_settings(settings)
+    try:
+        token = await asyncio.to_thread(client.exchange_code, code)
+    except FacebookError as e:
+        return _page(str(e), ok=False)
+    return _page(f"Đã kết nối fanpage {token.page_name}. Có thể đóng trang này.", ok=True)
+
+
+@app.post("/episodes/{episode_id}/publish/facebook", status_code=202)
+async def publish_facebook(request: Request, episode_id: str) -> dict:
+    store(request).get(episode_id)
+    root = store(request).paths(episode_id).root
+    job = jobs(request).submit(
+        "publish:facebook",
+        lambda ctx: facebook_publish.run_publish_facebook(settings, root, ctx),
         episode_id=episode_id)
     return {"job_id": job.id, "status_url": f"/jobs/{job.id}"}
 

@@ -15,7 +15,7 @@ const STEP_ENDPOINT = {
   tts: 'tts', mix: 'mix', align: 'align', subtitles: 'subtitles', metadata: 'metadata',
   clips: 'clips/select', thumbnail: 'thumbnail', render: 'render?format=all',
 };
-const HEALTH_LABELS = { voice_studio: 'Voice Studio', claude: 'Claude', n8n: 'n8n', tiktok: 'TikTok' };
+const HEALTH_LABELS = { voice_studio: 'Voice Studio', claude: 'Claude', n8n: 'n8n', tiktok: 'TikTok', facebook: 'Facebook' };
 
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
@@ -199,6 +199,13 @@ async function renderEpisode(id, quiet = false) {
       <span class="muted small">${t.status === 'SEND_TO_USER_INBOX' ? 'trong hộp nháp TikTok' : esc(t.status)}</span>
       <div class="copy-box">${esc(t.caption)}<button class="btn small" data-copy="${esc(t.caption)}">Copy</button></div></div>`).join('')
     : '<p class="muted small">Chưa gửi lên TikTok.</p>';
+  const fb = d.facebook || {};
+  const fbPosts = [...(fb.video ? [{ label: 'Video tập', ...fb.video }] : []),
+    ...(fb.reels || []).map((r) => ({ label: `Reel: ${r.title || r.name}`, ...r }))];
+  const fbHtml = fbPosts.length ? fbPosts.map((p) => `<div><b>${esc(p.label)}</b>
+      <span class="muted small">${p.status === 'published' ? '' : esc(p.status)}</span>
+      <a href="${esc(p.url)}" target="_blank">mở</a></div>`).join('')
+    : '<p class="muted small">Chưa đăng lên Facebook.</p>';
 
   const keepScroll = quiet ? window.scrollY : 0;
   view.innerHTML = `<div class="panel">
@@ -216,14 +223,16 @@ async function renderEpisode(id, quiet = false) {
           ${d.steps.filter((x) => STEP_ENDPOINT[x.name]).map((x) => `<option value="${x.name}">${esc(x.label)}</option>`).join('')}
         </select>
         <button class="btn" data-act="tiktok" ${s.state === 'processing' ? 'disabled' : ''}>Gửi TikTok</button>
+        <button class="btn" data-act="facebook" ${s.state === 'processing' ? 'disabled' : ''}>Đăng Facebook</button>
       </div>
     </div>
 
     ${s.state === 'waiting' ? `<div class="alert warn">Bản nháp đang chờ duyệt. Duyệt ở đây hoặc trên Telegram đều được:
-      video chính + Shorts lên YouTube (riêng tư), Short gửi vào hộp nháp TikTok.</div>` : ''}
+      video chính + Shorts lên YouTube (riêng tư), Short gửi vào hộp nháp TikTok, video + Reels lên fanpage Facebook.</div>` : ''}
     ${published ? `<div class="alert ok"><b>Đã đăng.</b> YouTube: <a href="https://youtu.be/${esc(published.youtube_id)}" target="_blank">youtu.be/${esc(published.youtube_id)}</a>
       ${published.short_ids && published.short_ids.length ? ` · ${published.short_ids.length} Shorts` : ''}
-      ${published.tiktok ? `<br>${esc(published.tiktok)}` : ''}</div>` : ''}
+      ${published.tiktok ? `<br>${esc(published.tiktok)}` : ''}
+      ${published.facebook ? `<br>${esc(published.facebook)}` : ''}</div>` : ''}
 
     ${job && (job.status === 'running' || job.status === 'queued' || job.status === 'failed') ? `<div class="card">
       <h3>Tiến độ · ${esc(job.kind)}</h3>
@@ -240,6 +249,7 @@ async function renderEpisode(id, quiet = false) {
           : `<div class="card"><video src="${base}/episode_16x9.mp4?v=${v}#t=2" controls preload="metadata"></video></div>`}
         ${shortsHtml ? `<div class="card"><h3>Shorts</h3><div class="shorts">${shortsHtml}</div></div>` : ''}
         <div class="card"><h3>TikTok</h3>${ttHtml}</div>
+        <div class="card"><h3>Facebook${fb.page ? ' · ' + esc(fb.page) : ''}</h3>${fbHtml}</div>
       </div>
       <div>
         ${sum.missing && sum.missing.includes('thumbnail.png') ? '' : `<div class="card"><img src="${base}/thumbnail.png?v=${v}" alt="thumbnail" style="width:100%;border-radius:8px"></div>`}
@@ -273,10 +283,11 @@ async function renderEpisode(id, quiet = false) {
 
 async function act(id, action, el) {
   const confirmText = {
-    approve: 'Duyệt và đăng: video chính + Shorts lên YouTube (riêng tư), Short vào hộp nháp TikTok?',
+    approve: 'Duyệt và đăng: video chính + Shorts lên YouTube (riêng tư), Short vào hộp nháp TikTok, video + Reels công khai lên fanpage Facebook?',
     reject: 'Từ chối bản nháp này? Sẽ không đăng gì.',
     pipeline: 'Chạy pipeline cho tập này? Các bước đã có kết quả hợp lệ sẽ được bỏ qua.',
     tiktok: 'Gửi các Short vào hộp nháp TikTok? Clip nào đã gửi sẽ không gửi lại.',
+    facebook: 'Đăng CÔNG KHAI video tập + Reels lên fanpage Facebook? Phần nào đã đăng sẽ không đăng lại.',
   }[action] || 'Chạy lại bước này? Kết quả cũ của bước sẽ bị thay.';
   if (!confirm(confirmText)) { if (el.tagName === 'SELECT') el.value = ''; return; }
   el.disabled = true;
@@ -291,6 +302,8 @@ async function act(id, action, el) {
       await api(`/episodes/${id}/pipeline/run`, { method: 'POST' }); toast('Đã bắt đầu pipeline.');
     } else if (action === 'tiktok') {
       await api(`/episodes/${id}/publish/tiktok`, { method: 'POST' }); toast('Đang gửi lên TikTok…');
+    } else if (action === 'facebook') {
+      await api(`/episodes/${id}/publish/facebook`, { method: 'POST' }); toast('Đang đăng lên Facebook…');
     } else if (action.startsWith('step:')) {
       const step = action.slice(5);
       await api(`/episodes/${id}/${STEP_ENDPOINT[step]}`, { method: 'POST' }); toast('Đã bắt đầu chạy lại bước.');

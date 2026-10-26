@@ -272,42 +272,69 @@ const errors = items.filter((j) => j.error).map((j) =>
 return [{ json: { short_ids: ids, short_errors: errors } }];
 """)
 
-# --- TikTok (media-service does the API work; skipped when not connected) ---------------
+# --- TikTok, then Facebook (media-service does the API work; each is skipped when its
+#     account is not connected, and a failure never stops the other) ------------------
 
-http("Trạng thái TikTok", (6160, -260), "GET", f"{MEDIA}/tiktok/status", full=False)
-if_node("TikTok sẵn sàng?", (6380, -260), cond("={{ $json.connected === true }}", "true",
-                                                type_="boolean"))
-http("Đăng TikTok", (6600, -360), "POST",
-     f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish/tiktok")
-set_node("Job TikTok", (6820, -360), {"job_id": "={{ $json.body.job_id }}"})
-node("Đợi TikTok", "wait", 1.1, (7040, -360), {"amount": 20, "unit": "seconds"},
-     webhookId=uid("wait-tiktok"))
-http("Kiểm tra TikTok", (7260, -360), "GET",
-     "={{ $env.MEDIA_SERVICE_URL }}/jobs/{{ $('Job TikTok').item.json.job_id }}",
-     full=False, never_error=False)
-node("Kết quả TikTok", "switch", 3.2, (7480, -360), {
-    "rules": {"values": [
-        {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
-                                    "typeValidation": "strict", "version": 2},
-                        "conditions": [cond("={{ $json.status }}", "equals", "succeeded")],
-                        "combinator": "and"}, "renameOutput": True, "outputKey": "xong"},
-        {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
-                                    "typeValidation": "strict", "version": 2},
-                        "conditions": [cond("={{ $json.status }}", "equals", "failed")],
-                        "combinator": "and"}, "renameOutput": True, "outputKey": "lỗi"}]},
-    "options": {"fallbackOutput": "extra", "renameFallbackOutput": "đang chạy"}})
-if_node("TikTok quá lâu?", (7700, -200), cond(
-    "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
-    "gt", 30, "number"))
-set_node("TikTok xong", (7700, -500), {"tiktok_text": (
-    "={{ $json.result.summary_text || ('🎵 TikTok: ' + $json.result.posts.length + ' video') }}")})
-set_node("TikTok lỗi", (7700, -360), {
-    "tiktok_text": "={{ '⚠️ TikTok lỗi: ' + ($json.error?.message || 'không rõ') }}"})
-set_node("TikTok quá lâu", (7920, -200), {"tiktok_text": "⚠️ TikTok: quá 30 phút chưa xong"})
-set_node("TikTok bỏ qua", (6600, -160), {"tiktok_text": (
-    "={{ '🎵 TikTok: bỏ qua (' + ($json.configured ? ($json.error || 'chưa kết nối tài khoản') "
-    ": 'chưa cấu hình') + ')' }}")})
-code("Soạn tin đã đăng", (8140, -260), r"""
+
+def platform_chain(key: str, label: str, emoji: str, x: int, skip_reason: str) -> list[str]:
+    """status -> connected? -> start publish job -> poll until done -> one text field.
+
+    Returns the four outcome nodes; each sets `{key}_text` for the Telegram message.
+    """
+    text = f"{key}_text"
+    job = f"Job {label}"
+    http(f"Trạng thái {label}", (x, -260), "GET", f"{MEDIA}/{key}/status", full=False)
+    if_node(f"{label} sẵn sàng?", (x + 220, -260), cond("={{ $json.connected === true }}", "true",
+                                                         type_="boolean"))
+    http(f"Đăng {label}", (x + 440, -360), "POST",
+         f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish/{key}")
+    set_node(job, (x + 660, -360), {"job_id": "={{ $json.body.job_id }}"})
+    node(f"Đợi {label}", "wait", 1.1, (x + 880, -360), {"amount": 20, "unit": "seconds"},
+         webhookId=uid(f"wait-{key}"))
+    http(f"Kiểm tra {label}", (x + 1100, -360), "GET",
+         f"={{{{ $env.MEDIA_SERVICE_URL }}}}/jobs/{{{{ $('{job}').item.json.job_id }}}}",
+         full=False, never_error=False)
+    node(f"Kết quả {label}", "switch", 3.2, (x + 1320, -360), {
+        "rules": {"values": [
+            {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
+                                        "typeValidation": "strict", "version": 2},
+                            "conditions": [cond("={{ $json.status }}", "equals", "succeeded")],
+                            "combinator": "and"}, "renameOutput": True, "outputKey": "xong"},
+            {"conditions": {"options": {"caseSensitive": True, "leftValue": "",
+                                        "typeValidation": "strict", "version": 2},
+                            "conditions": [cond("={{ $json.status }}", "equals", "failed")],
+                            "combinator": "and"}, "renameOutput": True, "outputKey": "lỗi"}]},
+        "options": {"fallbackOutput": "extra", "renameFallbackOutput": "đang chạy"}})
+    if_node(f"{label} quá lâu?", (x + 1540, -200), cond(
+        "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
+        "gt", 30, "number"))
+    set_node(f"{label} xong", (x + 1540, -500), {text: (
+        f"={{{{ $json.result.summary_text || '{emoji} {label}: xong' }}}}")})
+    set_node(f"{label} lỗi", (x + 1540, -360), {
+        text: f"={{{{ '⚠️ {label} lỗi: ' + ($json.error?.message || 'không rõ') }}}}"})
+    set_node(f"{label} quá lâu", (x + 1760, -200), {text: f"⚠️ {label}: quá 30 phút chưa xong"})
+    set_node(f"{label} bỏ qua", (x + 440, -160), {text: (
+        f"={{{{ '{emoji} {label}: bỏ qua (' + ($json.configured ? ($json.error || "
+        f"'{skip_reason}') : 'chưa cấu hình') + ')' }}}}")})
+    link(f"Trạng thái {label}", f"{label} sẵn sàng?")
+    link(f"{label} sẵn sàng?", f"Đăng {label}", 0)
+    link(f"{label} sẵn sàng?", f"{label} bỏ qua", 1)
+    link(f"Đăng {label}", job)
+    link(job, f"Đợi {label}")
+    link(f"Đợi {label}", f"Kiểm tra {label}")
+    link(f"Kiểm tra {label}", f"Kết quả {label}")
+    link(f"Kết quả {label}", f"{label} xong", 0)
+    link(f"Kết quả {label}", f"{label} lỗi", 1)
+    link(f"Kết quả {label}", f"{label} quá lâu?", 2)
+    link(f"{label} quá lâu?", f"{label} quá lâu", 0)
+    link(f"{label} quá lâu?", f"Đợi {label}", 1)
+    return [f"{label} xong", f"{label} lỗi", f"{label} quá lâu", f"{label} bỏ qua"]
+
+
+TIKTOK_DONE = platform_chain("tiktok", "TikTok", "🎵", 6160, "chưa kết nối tài khoản")
+set_node("Gom TikTok", (7980, -260), {"tiktok_text": "={{ $json.tiktok_text }}"})
+FACEBOOK_DONE = platform_chain("facebook", "Facebook", "📘", 8200, "chưa kết nối fanpage")
+code("Soạn tin đã đăng", (10180, -260), r"""
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const s = $('Tóm tắt tập').first().json;
 const yt = $('Upload YouTube').first().json;
@@ -341,13 +368,14 @@ set_node("Tin từ chối", (3960, 60), {"text": (
 
 # --- report outcomes to media-service (web UI status); never blocks the run ------------
 
-http("Ghi kết quả đăng", (8360, -100), "POST",
+http("Ghi kết quả đăng", (10400, -100), "POST",
      f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish-status",
      json_body="={{ JSON.stringify({ state: 'published', "
                "youtube_id: $('Upload YouTube').first().json.uploadId || "
                "$('Upload YouTube').first().json.id, "
                "short_ids: $('Gom Shorts').first().json.short_ids, "
-               "tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null }) }}")
+               "tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null, "
+               "facebook: $('Soạn tin đã đăng').first().json.facebook_text || null }) }}")
 http("Ghi kết quả từ chối", (4180, 200), "POST",
      f"={{{{ $env.MEDIA_SERVICE_URL }}}}/episodes/{{{{ {EP} }}}}/publish-status",
      json_body="={{ JSON.stringify({ state: $('Chờ duyệt').first().json.query?.decision "
@@ -429,19 +457,10 @@ link("Có Short để đăng?", "Gom Shorts", 1)
 link("Đọc Short", "Upload Short YouTube")
 link("Upload Short YouTube", "Gom Shorts")
 link("Gom Shorts", "Trạng thái TikTok")
-link("Trạng thái TikTok", "TikTok sẵn sàng?")
-link("TikTok sẵn sàng?", "Đăng TikTok", 0)
-link("TikTok sẵn sàng?", "TikTok bỏ qua", 1)
-link("Đăng TikTok", "Job TikTok")
-link("Job TikTok", "Đợi TikTok")
-link("Đợi TikTok", "Kiểm tra TikTok")
-link("Kiểm tra TikTok", "Kết quả TikTok")
-link("Kết quả TikTok", "TikTok xong", 0)
-link("Kết quả TikTok", "TikTok lỗi", 1)
-link("Kết quả TikTok", "TikTok quá lâu?", 2)
-link("TikTok quá lâu?", "TikTok quá lâu", 0)
-link("TikTok quá lâu?", "Đợi TikTok", 1)
-for done in ("TikTok xong", "TikTok lỗi", "TikTok quá lâu", "TikTok bỏ qua"):
+for done in TIKTOK_DONE:
+    link(done, "Gom TikTok")
+link("Gom TikTok", "Trạng thái Facebook")
+for done in FACEBOOK_DONE:
     link(done, "Soạn tin đã đăng")
 link("Soạn tin đã đăng", "Gửi thông báo")
 link("Soạn tin đã đăng", "Ghi kết quả đăng")

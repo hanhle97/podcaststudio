@@ -142,7 +142,7 @@ def test_status_endpoint_shape(client, monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "get", down)
     s = client.get("/ui/status").json()
-    assert set(s) == {"voice_studio", "claude", "n8n", "tiktok"}
+    assert set(s) == {"voice_studio", "claude", "n8n", "tiktok", "facebook"}
     assert s["n8n"]["ok"] is False and s["voice_studio"]["ok"] is False
-    assert s["tiktok"]["optional"] is True
+    assert s["tiktok"]["optional"] is True and s["facebook"]["optional"] is True
     assert dashboard.WORDS_PER_SECOND > 0

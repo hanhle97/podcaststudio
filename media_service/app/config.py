@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     tiktok_mode: Literal["inbox", "direct"] = "inbox"
     tiktok_privacy: str = "SELF_ONLY"  # direct mode only
     tiktok_max_clips: int = 3
+    # Facebook Page (Graph API). Login once at /facebook/auth/start; localhost redirect works
+    # while the Meta app is in development mode.
+    facebook_app_id: str = ""
+    facebook_app_secret: str = ""
+    facebook_redirect_uri: str = "http://localhost:8000/facebook/auth/callback"
+    facebook_page_id: str = ""  # page id or exact name; empty = the first page you grant
+    facebook_graph_version: str = "v23.0"
+    facebook_post_video: bool = True  # the 16:9 episode as a video post
+    facebook_max_reels: int = 3  # Shorts posted as Reels (3-90 s)
     log_level: str = "INFO"
 
     @property

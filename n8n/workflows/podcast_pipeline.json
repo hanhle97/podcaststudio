@@ -1111,7 +1111,7 @@
             {
               "id": "a54786d4-a566-5777-86b0-ece34316796f",
               "name": "tiktok_text",
-              "value": "={{ $json.result.summary_text || ('🎵 TikTok: ' + $json.result.posts.length + ' video') }}",
+              "value": "={{ $json.result.summary_text || '🎵 TikTok: xong' }}",
               "type": "string"
             }
           ]
@@ -1198,6 +1198,364 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aba7da7b-e49c-5fcb-baf7-5b9f2917931f",
+              "name": "tiktok_text",
+              "value": "={{ $json.tiktok_text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "49fb5498-5c80-54a4-a5f6-f74f024fe32a",
+      "name": "Gom TikTok",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7980,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/facebook/status",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b20af5df-ac4d-5faa-9417-fd46c77985e7",
+      "name": "Trạng thái Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8200,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "04870fe3-ff7e-5649-8c9c-692d3473d950",
+              "leftValue": "={{ $json.connected === true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ecfe3c0d-7fa4-5107-8d93-cf5d1d7f4dad",
+      "name": "Facebook sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        8420,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/episodes/{{ $('Episode').item.json.episode_id }}/publish/facebook",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "54a9c834-d4eb-5bf9-bc53-0893f128b0f2",
+      "name": "Đăng Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8640,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "77e005e6-7d8a-5989-b854-2205b8624726",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "317acd86-e106-5709-9586-25005a16abc5",
+      "name": "Job Facebook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8860,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "7c84855f-4f22-5e16-aeb8-d00ee0f4adf4",
+      "name": "Đợi Facebook",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        9080,
+        -360
+      ],
+      "webhookId": "f81650e7-e261-53ce-b6d5-6b03e8f04974"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MEDIA_SERVICE_URL }}/jobs/{{ $('Job Facebook').item.json.job_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "fd26b2b5-c1db-56ff-8662-ddfb01772e29",
+      "name": "Kiểm tra Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9300,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e784ff84-12de-55c7-ac5a-1dbd811d5733",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "succeeded"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "xong"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d460d2bc-be03-5648-82cd-02095cbb4178",
+                    "leftValue": "={{ $json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "failed"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lỗi"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "đang chạy"
+        }
+      },
+      "id": "c275f804-034e-5d98-82a6-a35f6204bd42",
+      "name": "Kết quả Facebook",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        9520,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7529c68f-bcf5-5c8f-a714-414f112d823f",
+              "leftValue": "={{ ($now.toMillis() - DateTime.fromISO($json.created_at).toMillis()) / 60000 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 30
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "705291fb-aad3-5233-be2d-adc34221fac0",
+      "name": "Facebook quá lâu?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        9740,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1192609-7b83-5f94-af16-8b3a97776144",
+              "name": "facebook_text",
+              "value": "={{ $json.result.summary_text || '📘 Facebook: xong' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cc86b1f7-1639-5ad5-9285-6f5d90dcb305",
+      "name": "Facebook xong",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        9740,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e2b4731d-3b74-55bc-b867-b918ab962e4f",
+              "name": "facebook_text",
+              "value": "={{ '⚠️ Facebook lỗi: ' + ($json.error?.message || 'không rõ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2199388-39e4-5a56-9ce8-356588526845",
+      "name": "Facebook lỗi",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        9740,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff26b5f6-0185-5956-91b0-2ab20463fafd",
+              "name": "facebook_text",
+              "value": "⚠️ Facebook: quá 30 phút chưa xong",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dad7b9c0-2657-5938-a628-f71ed3878a0d",
+      "name": "Facebook quá lâu",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        9960,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b590caea-9b19-5a43-9e9e-105f953c4402",
+              "name": "facebook_text",
+              "value": "={{ '📘 Facebook: bỏ qua (' + ($json.configured ? ($json.error || 'chưa kết nối fanpage') : 'chưa cấu hình') + ')' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1e9ada55-dae6-5158-97fc-215e690ea4c6",
+      "name": "Facebook bỏ qua",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8640,
+        -160
+      ]
+    },
+    {
+      "parameters": {
         "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst s = $('Tóm tắt tập').first().json;\nconst yt = $('Upload YouTube').first().json;\nconst cap = $('Upload phụ đề').first().json;\nconst shorts = $('Gom Shorts').first().json;\nconst ep = $('Episode').first().json;\nconst lines = [\n  `✅ <b>Đã upload YouTube</b> (${esc($env.YOUTUBE_PRIVACY || 'private')})`,\n  esc(s.title),\n  `https://youtu.be/${yt.uploadId || yt.id}`,\n  `Phụ đề: ${cap.statusCode === 200 ? 'đã thêm' : 'lỗi ' + cap.statusCode}`,\n];\nif (shorts.short_ids.length) {\n  lines.push(`📱 YouTube Shorts (${shorts.short_ids.length}):`);\n  shorts.short_ids.forEach((id) => lines.push(`  https://youtube.com/shorts/${id}`));\n}\nif (shorts.short_errors.length) {\n  lines.push(`⚠️ ${shorts.short_errors.length} Short lỗi: ${esc(shorts.short_errors[0])}`);\n}\nlines.push(esc($input.first().json.tiktok_text));\nif (ep.inbox_file) lines.push('Script đã chuyển vào inbox/done/');\nreturn [{ json: { text: lines.join('\\n'), tiktok_text: $input.first().json.tiktok_text } }];"
       },
       "id": "dd9d3f62-7ef8-590b-96ca-d5bfd87583d8",
@@ -1205,7 +1563,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        8140,
+        10180,
         -260
       ]
     },
@@ -1273,14 +1631,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ state: 'published', youtube_id: $('Upload YouTube').first().json.uploadId || $('Upload YouTube').first().json.id, short_ids: $('Gom Shorts').first().json.short_ids, tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null }) }}"
+        "jsonBody": "={{ JSON.stringify({ state: 'published', youtube_id: $('Upload YouTube').first().json.uploadId || $('Upload YouTube').first().json.id, short_ids: $('Gom Shorts').first().json.short_ids, tiktok: $('Soạn tin đã đăng').first().json.tiktok_text || null, facebook: $('Soạn tin đã đăng').first().json.facebook_text || null }) }}"
       },
       "id": "0d66c8bc-8ef6-5ab8-ac16-518d06b1b61f",
       "name": "Ghi kết quả đăng",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8360,
+        10400,
         -100
       ]
     },
@@ -1502,6 +1860,238 @@
     }
   ],
   "connections": {
+    "Trạng thái TikTok": {
+      "main": [
+        [
+          {
+            "node": "TikTok sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "Đăng TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok bỏ qua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đăng TikTok": {
+      "main": [
+        [
+          {
+            "node": "Job TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job TikTok": {
+      "main": [
+        [
+          {
+            "node": "Đợi TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đợi TikTok": {
+      "main": [
+        [
+          {
+            "node": "Kiểm tra TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kiểm tra TikTok": {
+      "main": [
+        [
+          {
+            "node": "Kết quả TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kết quả TikTok": {
+      "main": [
+        [
+          {
+            "node": "TikTok xong",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok quá lâu?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok quá lâu?": {
+      "main": [
+        [
+          {
+            "node": "TikTok quá lâu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Đợi TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trạng thái Facebook": {
+      "main": [
+        [
+          {
+            "node": "Facebook sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "Đăng Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook bỏ qua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đăng Facebook": {
+      "main": [
+        [
+          {
+            "node": "Job Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Facebook": {
+      "main": [
+        [
+          {
+            "node": "Đợi Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Đợi Facebook": {
+      "main": [
+        [
+          {
+            "node": "Kiểm tra Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kiểm tra Facebook": {
+      "main": [
+        [
+          {
+            "node": "Kết quả Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kết quả Facebook": {
+      "main": [
+        [
+          {
+            "node": "Facebook xong",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook lỗi",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook quá lâu?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook quá lâu?": {
+      "main": [
+        [
+          {
+            "node": "Facebook quá lâu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Đợi Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Thả file vào inbox": {
       "main": [
         [
@@ -1903,127 +2493,11 @@
         ]
       ]
     },
-    "Trạng thái TikTok": {
-      "main": [
-        [
-          {
-            "node": "TikTok sẵn sàng?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "TikTok sẵn sàng?": {
-      "main": [
-        [
-          {
-            "node": "Đăng TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "TikTok bỏ qua",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Đăng TikTok": {
-      "main": [
-        [
-          {
-            "node": "Job TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Job TikTok": {
-      "main": [
-        [
-          {
-            "node": "Đợi TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Đợi TikTok": {
-      "main": [
-        [
-          {
-            "node": "Kiểm tra TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Kiểm tra TikTok": {
-      "main": [
-        [
-          {
-            "node": "Kết quả TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Kết quả TikTok": {
-      "main": [
-        [
-          {
-            "node": "TikTok xong",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "TikTok lỗi",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "TikTok quá lâu?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "TikTok quá lâu?": {
-      "main": [
-        [
-          {
-            "node": "TikTok quá lâu",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Đợi TikTok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "TikTok xong": {
       "main": [
         [
           {
-            "node": "Soạn tin đã đăng",
+            "node": "Gom TikTok",
             "type": "main",
             "index": 0
           }
@@ -2034,7 +2508,7 @@
       "main": [
         [
           {
-            "node": "Soạn tin đã đăng",
+            "node": "Gom TikTok",
             "type": "main",
             "index": 0
           }
@@ -2045,7 +2519,7 @@
       "main": [
         [
           {
-            "node": "Soạn tin đã đăng",
+            "node": "Gom TikTok",
             "type": "main",
             "index": 0
           }
@@ -2053,6 +2527,61 @@
       ]
     },
     "TikTok bỏ qua": {
+      "main": [
+        [
+          {
+            "node": "Gom TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gom TikTok": {
+      "main": [
+        [
+          {
+            "node": "Trạng thái Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook xong": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook lỗi": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook quá lâu": {
+      "main": [
+        [
+          {
+            "node": "Soạn tin đã đăng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook bỏ qua": {
       "main": [
         [
           {

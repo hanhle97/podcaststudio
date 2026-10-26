@@ -210,6 +210,33 @@ cần làm lại bước 5 khi hết hạn hoặc bị thu hồi. App **chưa qu
 **riêng tư** (`TIKTOK_PRIVACY=SELF_ONLY`); muốn đăng công khai phải gửi app cho TikTok duyệt.
 Đăng lại một tập không tạo video trùng (`data/episodes/<id>/publish/tiktok.json`).
 
+### 3.5 Facebook fanpage
+
+(Tùy chọn, Graph API chính thức.) Sau khi bạn **Duyệt**, `episode_16x9.mp4` được đăng **công khai**
+thành bài video trên fanpage (tiêu đề + mô tả có mục lục), và tối đa `FACEBOOK_MAX_REELS` Short
+(3–90 giây) được đăng thành **Reels** kèm caption + hashtag. Chưa cấu hình thì bước này được bỏ qua;
+lỗi Facebook không chặn YouTube/TikTok. Không cần tunnel: khi app Meta còn ở chế độ phát triển,
+Facebook cho phép redirect về `http://localhost`.
+
+1. Vào [developers.facebook.com/apps](https://developers.facebook.com/apps) → **Create app**. Chọn use
+   case **Manage everything on your Page** (hoặc loại app *Business*), không cần gắn Business portfolio.
+   Để app ở chế độ **Development**: chỉ bạn (admin app) dùng, không cần Meta duyệt.
+2. Trong app → *Use cases* → *Customize*: thêm các quyền `pages_show_list`,
+   `pages_read_engagement`, `pages_manage_posts`, `publish_video`.
+   Mục *Facebook Login* → *Settings*: thêm `http://localhost:8000/facebook/auth/callback` vào
+   *Valid OAuth Redirect URIs* (nếu ô này có).
+3. *App settings → Basic*: chép **App ID** và **App secret** vào `.env` (`FACEBOOK_APP_ID`,
+   `FACEBOOK_APP_SECRET`). Quản lý nhiều trang thì ghi tên hoặc id trang vào `FACEBOOK_PAGE_ID`.
+   Chạy `docker compose up -d`.
+4. Trên máy chạy Docker, mở http://localhost:8000/facebook/auth/start, đăng nhập Facebook, chọn
+   fanpage và cho phép mọi quyền. Thấy "Đã kết nối fanpage …" là xong.
+5. Kiểm tra: `curl http://localhost:8000/facebook/status` → `"connected": true`.
+
+Token của trang được lưu ở `data/secrets/facebook_token.json` và không hết hạn; chỉ cần làm lại bước
+4 khi đổi mật khẩu Facebook, gỡ quyền app, hoặc muốn đổi sang trang khác. Đăng lại một tập không tạo
+bài trùng (`data/episodes/<id>/publish/facebook.json`). Không muốn đăng video dài thì đặt
+`FACEBOOK_POST_VIDEO=false` (chỉ đăng Reels).
+
 Các biến khác: `YOUTUBE_PRIVACY` (private | unlisted | public, mặc định private),
 `YOUTUBE_CATEGORY_ID` (22 People & Blogs, 27 Education, 28 Science & Technology),
 `PIPELINE_TIMEOUT_MIN` (mặc định 120).
@@ -282,13 +309,13 @@ Ví dụ đầy đủ: [`examples/script_demo.md`](examples/script_demo.md) (~62
 
 Cách dễ nhất. Trang web do media-service phục vụ (không cần cài thêm gì):
 
-- **Thanh trạng thái**: Voice Studio, Claude, n8n, TikTok (xanh = sẵn sàng; di chuột vào để xem lý do).
+- **Thanh trạng thái**: Voice Studio, Claude, n8n, TikTok, Facebook (xanh = sẵn sàng; di chuột vào để xem lý do).
 - **+ Tập mới**: kéo thả file `.md` hoặc soạn trực tiếp → **Kiểm tra** (lỗi hiện theo dòng, bấm vào
   để nhảy tới dòng đó) → **Gửi đi** (kịch bản vào `data/inbox/`, n8n chạy như bình thường).
 - **Danh sách tập**: trạng thái Đang xử lý (%) / Chờ duyệt / Đã đăng / Lỗi ở bước nào.
 - **Trang của tập**: xem video và Shorts, thumbnail, tiêu đề/mô tả/tags (có nút Copy), caption TikTok,
   tải file đầu ra, **Duyệt / Từ chối** (tương đương nút trên Telegram), chạy lại pipeline hoặc một
-  bước, gửi lại TikTok.
+  bước, gửi lại TikTok, đăng lại Facebook.
 
 Cổng 8000 mở cho cả mạng LAN (để link trong Telegram mở được từ điện thoại), nên ai cùng mạng cũng
 vào được trang này. Đừng dùng trên WiFi công cộng.
