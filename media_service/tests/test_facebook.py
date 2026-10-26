@@ -79,7 +79,7 @@ def test_authorize_url_asks_for_page_permissions(tmp_path):
     url = make_client(tmp_path, FakeGraph()).authorize_url("st")
     q = parse_qs(urlparse(url).query)
     assert url.startswith("https://www.facebook.com/v23.0/dialog/oauth?")
-    assert q["state"] == ["st"] and "publish_video" in q["scope"][0]
+    assert q["state"] == ["st"] and "pages_manage_posts" in q["scope"][0]
     bare = FacebookClient("", "", "", TokenStore(tmp_path / "x.json"))
     with pytest.raises(FacebookError, match="FACEBOOK_APP_ID"):
         bare.authorize_url("st")

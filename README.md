@@ -221,8 +221,8 @@ Facebook cho phép redirect về `http://localhost`.
 1. Vào [developers.facebook.com/apps](https://developers.facebook.com/apps) → **Create app**. Chọn use
    case **Manage everything on your Page** (hoặc loại app *Business*), không cần gắn Business portfolio.
    Để app ở chế độ **Development**: chỉ bạn (admin app) dùng, không cần Meta duyệt.
-2. Trong app → *Use cases* → *Customize*: thêm các quyền `pages_show_list`,
-   `pages_read_engagement`, `pages_manage_posts`, `publish_video`.
+2. Trong app → *Use cases* → *Customize*: kiểm tra `pages_show_list`, `pages_read_engagement`,
+   `pages_manage_posts` đang ở trạng thái *Ready for testing* (không cần gửi App Review).
    Mục *Facebook Login* → *Settings*: thêm `http://localhost:8000/facebook/auth/callback` vào
    *Valid OAuth Redirect URIs* (nếu ô này có).
 3. *App settings → Basic*: chép **App ID** và **App secret** vào `.env` (`FACEBOOK_APP_ID`,

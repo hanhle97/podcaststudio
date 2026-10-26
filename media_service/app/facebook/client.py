@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 import httpx
 
-SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts,publish_video"
+SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts"
 POLL_SECONDS = 10
 
 
