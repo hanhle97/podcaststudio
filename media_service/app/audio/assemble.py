@@ -80,7 +80,7 @@ def compute_timeline(script: Script, durations: dict[str, float], cfg: AudioCfg,
     Gaps: sentence gap within a paragraph, paragraph gap across paragraphs, chapter
     gap between chapters; [pause]/[music up] add their own duration on top.
     Sentences in `glued` were read in the same take as the previous sentence and cut
-    out of it, so they follow it with no added gap (the voice's own pause is kept).
+    out of it, so they keep the voice's own pause plus only the `joined` gap.
     """
     glued = glued or set()
     gaps = cfg.gaps_ms
@@ -102,7 +102,9 @@ def compute_timeline(script: Script, durations: dict[str, float], cfg: AudioCfg,
                 t += item.seconds
                 continue
             assert isinstance(item, Sentence)
-            if prev is not None and item.id not in glued:
+            if prev is not None and item.id in glued:
+                t += gaps.joined / 1000
+            elif prev is not None:
                 same = prev.paragraph == item.paragraph
                 t += (gaps.sentence if same else gaps.paragraph) / 1000
             dur = durations[item.id]

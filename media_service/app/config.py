@@ -129,6 +129,7 @@ class TTSCfg(BaseModel):
 
 class GapsCfg(BaseModel):
     sentence: int = 200
+    joined: int = 0  # added after a sentence read in the same take as the next one
     paragraph: int = 450
     chapter: int = 1200
 

@@ -106,8 +106,10 @@ Voice Studio phải **đang mở** khi chạy pipeline. Service gọi API gốc 
 các tham số biểu cảm như `class_temperature`), cổng mặc định 3900, gọi từ cùng máy không cần key.
 Mỗi lượt đọc được lưu vào lịch sử Generate của Voice Studio.
 
-Độ tự nhiên chỉnh trong `config/brand.yaml` → `tts`: `group_max_chars` (độ dài một lượt đọc),
-`sampling.class_temperature` (0 = đều đều, 0.6 = biểu cảm vừa). Đoạn ghi âm mẫu của voice profile
+Độ tự nhiên chỉnh trong `config/brand.yaml` → `tts`: `speed` (0.88 ≈ 4 tiếng/giây),
+`group_max_chars` (độ dài một lượt đọc), `sampling.class_temperature` (0 = rõ chữ nhất, cao hơn thì
+biểu cảm hơn nhưng dễ nuốt chữ), `sampling.guidance_scale` (cao hơn = bám chữ, tròn vành hơn) và
+`audio.gaps_ms.joined` (nghỉ thêm giữa các câu đọc chung một lượt). Đoạn ghi âm mẫu của voice profile
 quyết định nhiều nhất: mẫu đọc phẳng thì giọng clone cũng phẳng.
 
 | Voice Studio chạy ở đâu | `VOICE_STUDIO_URL` |

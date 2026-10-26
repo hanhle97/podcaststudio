@@ -30,7 +30,7 @@ tts:
   provider: voice_studio          # voice_studio | elevenlabs (stub)
   model: omnivoice                # Voice Studio engine id
   language: vi                    # language hint sent to Voice Studio and faster-whisper
-  speed: 1.0                      # 0.25..4.0
+  speed: 0.88                     # 0.25..4.0; 0.88 = calm podcast pace (~4 syllables/s)
   seed: 42                        # fixed seed = same sentence always sounds the same (cache-friendly)
   concurrency: 2                  # parallel requests to the TTS API
   max_chars_per_request: 400      # long sentences are split at commas/spaces below this
@@ -42,13 +42,15 @@ tts:
   seed_attempts: 3                # seeds tried per group before falling back to one sentence per request
   sampling:                       # passed to Voice Studio POST /generate
     num_step: 32                  # 16 = fast, 32 = quality preset
-    class_temperature: 0.6        # 0 = flat/greedy; 0.3-0.9 = more expressive intonation
+    class_temperature: 0.0        # 0 = clearest articulation; 0.3-0.9 = more expressive but words may slur
+    guidance_scale: 3.0           # higher = sticks closer to the text, rounder words (Voice Studio default 2.0)
     effect_preset: raw            # no Voice Studio compression; our own chain runs in the mix step
 
 audio:
   sample_rate: 48000              # all speech is normalised to this rate, mono
   gaps_ms:                        # silence inserted between pieces of speech
-    sentence: 200                 # between requests within a paragraph (sentences read together keep their own pause)
+    sentence: 200                 # between requests within a paragraph
+    joined: 200                   # added after a sentence read in the same take as the next (on top of the voice's own pause)
     paragraph: 450                # after a blank line / speaker change
     chapter: 1200                 # between ## chapters (music rises here)
   lead_in_ms: 500                 # silence before the first word
