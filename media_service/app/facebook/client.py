@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 import httpx
 
-SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts"
+SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts,business_management"
 POLL_SECONDS = 10
 
 
@@ -108,7 +108,7 @@ class FacebookClient:
             "client_secret": self.app_secret, "fb_exchange_token": short})["access_token"]
         pages = self._get(f"{self.graph}/me/accounts", {
             "access_token": long_lived, "fields": "id,name,access_token,tasks",
-            "limit": 100}).get("data", [])
+            "limit": 100}).get("data", []) or self._other_pages(long_lived)
         if not pages:
             perms = self._get(f"{self.graph}/me/permissions",
                               {"access_token": long_lived}).get("data", [])
@@ -116,7 +116,7 @@ class FacebookClient:
             declined = [p["permission"] for p in perms if p.get("status") != "granted"]
             raise FacebookError(
                 "Facebook không trả về fanpage nào. Khi đăng nhập hãy chọn fanpage và bật đủ "
-                f"quyền. Đã cấp: {', '.join(granted) or 'không có'}; bị từ chối: "
+                "quyền, hoặc ghi ID trang vào FACEBOOK_PAGE_ID trong .env. Đã cấp: {', '.join(granted) or 'không có'}; bị từ chối: "
                 f"{', '.join(declined) or 'không có'}.")
         page = pick_page(pages, self.page_wanted)
         if not page.get("access_token"):
@@ -127,6 +127,36 @@ class FacebookClient:
                           connected_at=self.clock())
         self.store.save(token)
         return token
+
+    def _other_pages(self, user_token: str) -> list[dict[str, Any]]:
+        """Pages that /me/accounts leaves out: the one named by id, and Business-portfolio pages.
+
+        New-experience Pages and Pages owned by a Business portfolio often do not show up
+        in /me/accounts even when the person has full control of them.
+        """
+        fields = "id,name,access_token"
+        if self.page_wanted.isdigit():
+            try:
+                page = self._get(f"{self.graph}/{self.page_wanted}",
+                                 {"access_token": user_token, "fields": fields})
+                if page.get("access_token"):
+                    return [page]
+            except FacebookError:
+                pass
+        found: dict[str, dict[str, Any]] = {}
+        try:
+            businesses = self._get(f"{self.graph}/me/businesses",
+                                   {"access_token": user_token, "fields": "id"}).get("data", [])
+            for biz in businesses:
+                for edge in ("owned_pages", "client_pages"):
+                    for page in self._get(f"{self.graph}/{biz['id']}/{edge}", {
+                            "access_token": user_token, "fields": fields,
+                            "limit": 100}).get("data", []):
+                        if page.get("access_token"):
+                            found.setdefault(page["id"], page)
+        except FacebookError:
+            pass
+        return list(found.values())
 
     def token(self) -> PageToken:
         token = self.store.load()

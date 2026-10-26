@@ -14,7 +14,8 @@ G = "/v23.0"
 
 
 class FakeGraph:
-    def __init__(self, pages=None, statuses=("processing", "ready")):
+    def __init__(self, pages=None, statuses=("processing", "ready"), biz=False):
+        self.biz = biz
         self.pages = pages if pages is not None else [
             {"id": "111", "name": "Trang Một", "access_token": "page-tok-1"},
             {"id": "222", "name": "Podcast Hanh", "access_token": "page-tok-2"}]
@@ -36,6 +37,16 @@ class FakeGraph:
             return httpx.Response(200, json={"access_token": "short-user"})
         if path == f"{G}/me/accounts":
             return httpx.Response(200, json={"data": self.pages})
+        if path == f"{G}/me/businesses":
+            return httpx.Response(200, json={"data": [{"id": "biz1"}]} if self.biz else {"data": []})
+        if path == f"{G}/biz1/owned_pages":
+            return httpx.Response(200, json={"data": [
+                {"id": "333", "name": "Trang Business", "access_token": "biz-page-tok"}]})
+        if path == f"{G}/biz1/client_pages":
+            return httpx.Response(200, json={"data": []})
+        if path == f"{G}/444" and "access_token" in q.get("fields", ""):
+            return httpx.Response(200, json={"id": "444", "name": "Trang Mới",
+                                             "access_token": "direct-tok"})
         if path == f"{G}/me/permissions":
             return httpx.Response(200, json={"data": [
                 {"permission": "public_profile", "status": "granted"},
@@ -198,3 +209,15 @@ def test_no_pages_explains_which_permissions_were_declined(tmp_path):
     client = make_client(tmp_path, FakeGraph(pages=[]))
     with pytest.raises(FacebookError, match="bị từ chối: pages_show_list"):
         client.exchange_code("code")
+
+
+def test_page_found_by_id_when_me_accounts_is_empty(tmp_path):
+    client = make_client(tmp_path, FakeGraph(pages=[]), page="444")
+    tok = client.exchange_code("code")
+    assert (tok.page_id, tok.page_name, tok.access_token) == ("444", "Trang Mới", "direct-tok")
+
+
+def test_page_found_through_business_portfolio(tmp_path):
+    client = make_client(tmp_path, FakeGraph(pages=[], biz=True))
+    tok = client.exchange_code("code")
+    assert (tok.page_id, tok.access_token) == ("333", "biz-page-tok")

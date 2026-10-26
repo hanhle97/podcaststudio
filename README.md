@@ -222,11 +222,15 @@ Facebook cho phép redirect về `http://localhost`.
    case **Manage everything on your Page** (hoặc loại app *Business*), không cần gắn Business portfolio.
    Để app ở chế độ **Development**: chỉ bạn (admin app) dùng, không cần Meta duyệt.
 2. Trong app → *Use cases* → *Customize*: kiểm tra `pages_show_list`, `pages_read_engagement`,
-   `pages_manage_posts` đang ở trạng thái *Ready for testing* (không cần gửi App Review).
+   `pages_manage_posts`, `business_management` đang ở trạng thái *Ready for testing* (không cần gửi
+   App Review).
    Mục *Facebook Login* → *Settings*: thêm `http://localhost:8000/facebook/auth/callback` vào
    *Valid OAuth Redirect URIs* (nếu ô này có).
 3. *App settings → Basic*: chép **App ID** và **App secret** vào `.env` (`FACEBOOK_APP_ID`,
    `FACEBOOK_APP_SECRET`). Quản lý nhiều trang thì ghi tên hoặc id trang vào `FACEBOOK_PAGE_ID`.
+   Báo lỗi "không trả về fanpage nào" (hay gặp với trang kiểu mới hoặc trang trong Business
+   portfolio) thì ghi **ID số** của trang vào `FACEBOOK_PAGE_ID`: mở trang → *Giới thiệu* →
+   *Minh bạch về Trang* → *ID Trang*.
    Chạy `docker compose up -d`.
 4. Trên máy chạy Docker, mở http://localhost:8000/facebook/auth/start, đăng nhập Facebook, chọn
    fanpage và cho phép mọi quyền. Thấy "Đã kết nối fanpage …" là xong.
